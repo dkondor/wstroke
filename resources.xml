@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/easystroke">
+    <file preprocess="xml-stripblanks">gui.glade</file>
+  </gresource>
+</gresources>

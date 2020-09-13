@@ -2,6 +2,7 @@
 #include <wayfire/output.hpp>
 #include <wayfire/render-manager.hpp>
 #include <wayfire/core.hpp>
+#include <wayfire/util.hpp>
 #include <wayfire/util/log.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/view.hpp>
@@ -10,6 +11,8 @@
 #include <iostream>
 #include "gesture.h"
 #include "actiondb.h"
+
+#include "input_events.hpp"
 
 
 static const char *default_vertex_shader_source =
@@ -77,13 +80,16 @@ class wf_visitor : public ActionVisitor {
 
 class wayfire_easystroke : public wf::plugin_interface_t {
     protected:
-        bool active = false;
-        bool is_gesture = false;
         wf::button_callback stroke_initiate;
         wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
-        PreStroke ps;
         
+        PreStroke ps;
         ActionDB actions;
+        input_headless input;
+        wf::wl_idle_call idle_generate_click;
+        
+        bool active = false;
+        bool is_gesture = false;
         
     public:
         wayfire_easystroke() {
@@ -96,6 +102,8 @@ class wayfire_easystroke : public wf::plugin_interface_t {
 			std::string config_dir = getenv("HOME");
 			config_dir += "/.config/wstroke/";
 			actions.read(config_dir);
+			
+			input.init();
 			
 			/* copied from opengl.cpp */
 			OpenGL::render_begin();
@@ -118,6 +126,7 @@ class wayfire_easystroke : public wf::plugin_interface_t {
         void fini() override {
             if(active) cancel_stroke();
             output->rem_binding(&stroke_initiate);
+            input.fini();
             color_program.free_resources();
         }
     
@@ -187,14 +196,30 @@ class wayfire_easystroke : public wf::plugin_interface_t {
                 is_gesture = false;
             }
             else {
-                /* TODO: how to propagate mouse click? */
+                /* TODO: how to propagate mouse click? 
                 auto& core = wf::compositor_core_t::get();
-                auto t = wf::get_current_time();
                 const wf::buttonbinding_t& tmp = initiate;
                 output->rem_binding(&stroke_initiate);
                 core.fake_mouse_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
                 core.fake_mouse_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
-                output->add_button(initiate, &stroke_initiate);
+                output->add_button(initiate, &stroke_initiate); */
+                /* new version: use wlroots input device directly */
+                
+                /* Note: we cannot directly generate a click since using the
+                 * grab interface "unfocuses" any view under the cursor for
+                 * the purpose of receiving these events. The
+                 * grab_interface->ungrab() call does not instantly reset
+                 * this to avoid propagating this event, but adds the
+                 * necessary "refocus" to the idle loop. With this call,
+                 * we are adding the emulated click to the idle loop as well. */
+                idle_generate_click.run_once([this]() {
+					const wf::buttonbinding_t& tmp = initiate;
+					auto t = wf::get_current_time();
+					output->rem_binding(&stroke_initiate);
+					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
+					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
+					output->add_button(initiate, &stroke_initiate);
+				});
             }
             ps.clear();
             active = false;

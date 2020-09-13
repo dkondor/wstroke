@@ -4,7 +4,7 @@ Experimental port of [Easystroke mouse gestures](https://github.com/thjaeger/eas
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire). Needs a patch to propagate mouse clicks, either from [this branch](https://github.com/dkondor/wayfire/tree/fake_mouse_button) or just use the `fake_mouse_button.patch` file in this repository
+ - [Wayfire](https://github.com/WayfireWM/wayfire).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - Potentially [wcm](https://github.com/WayfireWM/wcm) to easily enable

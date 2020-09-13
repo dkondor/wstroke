@@ -18,6 +18,9 @@ gtkmm = dependency('gtkmm-3.0')
 gdkmm = dependency('gdkmm-3.0')
 boost = dependency('boost', modules: ['serialization'], static: false)
 wayfire = dependency('wayfire')
+wlroots = dependency('wlroots')
+wlserver = dependency('wayland-server')
+
 
 # additional dependencies for GUI
 glib    = dependency('glib-2.0')
@@ -56,9 +59,9 @@ wconf = executable('wstroke-config', wconf_sources,
         install: true,
         link_with: cellib)
 
-wslib_sources = ['easystroke_gestures.cpp', 'actiondb.cc', 'gesture.cc', 'stroke.c']
+wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', 'gesture.cc', 'stroke.c']
 wslib = shared_module('easystroke', wslib_sources,
-    dependencies: [wayfire, boost, gtkmm, gdkmm],
+    dependencies: [wayfire, wlroots, wlserver, boost, gtkmm, gdkmm],
     install: true,
     install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],

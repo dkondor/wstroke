@@ -64,15 +64,12 @@ void input_headless::init() {
 }
 
 void input_headless::fini() {
-	if(input_pointer) {
-		wlr_input_device_destroy(input_pointer);
-		input_pointer = nullptr;
-	}
 	if(headless_backend) {
 		auto& core = wf::compositor_core_t::get();
 		wlr_multi_backend_remove(core.backend, headless_backend);
 		wlr_backend_destroy(headless_backend);
 		headless_backend = nullptr;
+		input_pointer = nullptr;
 	}
 }
 

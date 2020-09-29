@@ -40,45 +40,8 @@ void main()
 })";
 
 
-class wf_visitor : public ActionVisitor {
-	protected:
-		wayfire_view active_view;
-	public:
-		wf_visitor(wayfire_view view) : active_view(view) { }
-		void visit(const Command* action) override {
-			LOGW("Command action not implemented!");
-		}
-		void visit(const SendKey* action) override {
-			LOGW("SendKey action not implemented!");
-		}
-		void visit(const SendText* action) override {
-			LOGW("SendText action not implemented!");
-		}
-		void visit(const Scroll* action) override {
-			LOGW("Scroll action not implemented!");
-		}
-		void visit(const Ignore* action) override {
-			LOGW("Ignore action not implemented!");
-		}
-		void visit(const Button* action) override {
-			LOGW("Button action not implemented!");
-		}
-		void visit(const Misc* action) override {
-			switch(action->get_action_type()) {
-				case Misc::Type::CLOSE:
-					if(active_view) active_view->close();
-					break;
-				case Misc::Type::MINIMIZE:
-					if(active_view) active_view->minimize_request(true);
-					break;
-				default:
-					break;
-			}
-		}
-};
 
-
-class wayfire_easystroke : public wf::plugin_interface_t {
+class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
     protected:
         wf::button_callback stroke_initiate;
         wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
@@ -86,10 +49,24 @@ class wayfire_easystroke : public wf::plugin_interface_t {
         PreStroke ps;
         ActionDB actions;
         input_headless input;
-        wf::wl_idle_call idle_generate_click;
+        wf::wl_idle_call idle_generate;
+        wayfire_view active_view;
         
         bool active = false;
         bool is_gesture = false;
+        
+        static constexpr std::array<std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>, 10> modifier_match = {
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::SHIFT_MASK, WLR_MODIFIER_SHIFT),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::LOCK_MASK, WLR_MODIFIER_CAPS),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::CONTROL_MASK, WLR_MODIFIER_CTRL),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD1_MASK, WLR_MODIFIER_ALT),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD2_MASK, WLR_MODIFIER_MOD2),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD3_MASK, WLR_MODIFIER_MOD3),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD4_MASK, WLR_MODIFIER_LOGO),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD5_MASK, WLR_MODIFIER_MOD5),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::META_MASK, WLR_MODIFIER_ALT),
+	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::SUPER_MASK, WLR_MODIFIER_LOGO)
+};
         
     public:
         wayfire_easystroke() {
@@ -129,6 +106,41 @@ class wayfire_easystroke : public wf::plugin_interface_t {
             input.fini();
             color_program.free_resources();
         }
+        
+        /* visitor interface for carrying out actions */
+        void visit(const Command* action) override {
+			LOGW("Command action not implemented!");
+		}
+		void visit(const SendKey* action) override {
+			LOGW("SendKey action not implemented!");
+		}
+		void visit(const SendText* action) override {
+			LOGW("SendText action not implemented!");
+		}
+		void visit(const Scroll* action) override {
+			LOGW("Scroll action not implemented!");
+		}
+		void visit(const Ignore* action) override {
+			auto ignore_mods = action->get_mods();
+			uint32_t mods_latched = 0;
+			for(auto p : modifier_match) if(ignore_mods & p.first) mods_latched |= p.second;
+			input.keyboard_mods(0, mods_latched, 0);
+		}
+		void visit(const Button* action) override {
+			LOGW("Button action not implemented!");
+		}
+		void visit(const Misc* action) override {
+			switch(action->get_action_type()) {
+				case Misc::Type::CLOSE:
+					if(active_view) active_view->close();
+					break;
+				case Misc::Type::MINIMIZE:
+					if(active_view) active_view->minimize_request(true);
+					break;
+				default:
+					break;
+			}
+		}
     
     protected:
         /* callback when the stroke mouse button is pressed */
@@ -176,9 +188,9 @@ class wayfire_easystroke : public wf::plugin_interface_t {
         
         /* callback when the mouse button is released */
         void end_stroke() {
-            grab_interface->ungrab();
-            output->deactivate_plugin(grab_interface);
             clear_lines();
+			grab_interface->ungrab();
+			output->deactivate_plugin(grab_interface);
             if(is_gesture) {
                 RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
 				/* try to match the stroke, write out match */
@@ -189,22 +201,13 @@ class wayfire_easystroke : public wf::plugin_interface_t {
 					const auto& type = action->get_type();
 					const auto& label = action->get_label();
 					LOGI("Matched stroke: ", type, " -- ", label);
-					wf_visitor visitor(output->get_active_view());
-					action->run(&visitor);
+					active_view = output->get_active_view();
+					action->run(this);
 				}
 				else LOGI("Unmatched stroke");
                 is_gesture = false;
             }
             else {
-                /* TODO: how to propagate mouse click? 
-                auto& core = wf::compositor_core_t::get();
-                const wf::buttonbinding_t& tmp = initiate;
-                output->rem_binding(&stroke_initiate);
-                core.fake_mouse_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
-                core.fake_mouse_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
-                output->add_button(initiate, &stroke_initiate); */
-                /* new version: use wlroots input device directly */
-                
                 /* Note: we cannot directly generate a click since using the
                  * grab interface "unfocuses" any view under the cursor for
                  * the purpose of receiving these events. The
@@ -212,7 +215,7 @@ class wayfire_easystroke : public wf::plugin_interface_t {
                  * this to avoid propagating this event, but adds the
                  * necessary "refocus" to the idle loop. With this call,
                  * we are adding the emulated click to the idle loop as well. */
-                idle_generate_click.run_once([this]() {
+                idle_generate.run_once([this]() {
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);
@@ -236,7 +239,12 @@ class wayfire_easystroke : public wf::plugin_interface_t {
         }
         
         
-    protected:
+    
+    /*****************************************************************
+     * Annotate-like functionality to draw the strokes on the screen *
+     * This could be replaced by a dependence on an external plugin  *
+     *****************************************************************/
+    
         /* draw lines on the screen, a simplified version of annotate */
         /* current annotation to be rendered -- store it in a framebuffer */
         wf::framebuffer_t fb;
@@ -340,6 +348,8 @@ class wayfire_easystroke : public wf::plugin_interface_t {
 			color_program.deactivate();
 		}
 };
+
+constexpr std::array<std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>, 10> wayfire_easystroke::modifier_match;
 
 DECLARE_WAYFIRE_PLUGIN(wayfire_easystroke)
 

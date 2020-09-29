@@ -26,6 +26,8 @@ extern "C" {
 #include <wlr/backend/multi.h>
 #include <wlr/interfaces/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_keyboard.h>
 }
 
 #include <wayfire/util/log.hpp>
@@ -61,6 +63,12 @@ void input_headless::init() {
 		fini();
 		return;
 	}
+	input_keyboard = wlr_headless_add_input_device(headless_backend, WLR_INPUT_DEVICE_KEYBOARD);
+	if(!input_keyboard) {
+		LOGE("Cannot create keyboard device!");
+		fini();
+		return;
+	}
 }
 
 void input_headless::fini() {
@@ -70,6 +78,7 @@ void input_headless::fini() {
 		wlr_backend_destroy(headless_backend);
 		headless_backend = nullptr;
 		input_pointer = nullptr;
+		input_keyboard = nullptr;
 	}
 }
 
@@ -87,3 +96,25 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
     wl_signal_emit(&(input_pointer->pointer->events.button), &ev);
 }
 
+void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wlr_key_state state) {
+	if(!(input_keyboard && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGI("Emitting keyboard event ", key, state == WLR_KEY_PRESSED ? ", pressed" : ", released");
+	wlr_event_keyboard_key ev;
+	ev.keycode = key;
+	ev.state = state;
+	ev.update_state = false;
+	ev.time_msec = time_msec;
+	wl_signal_emit(&(input_keyboard->keyboard->events.key), &ev);
+}
+
+void input_headless::keyboard_mods(uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked) {
+	if(!(input_keyboard && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGI("Changing keyboard modifiers");
+	wlr_keyboard_notify_modifiers(input_keyboard->keyboard, mods_depressed, mods_latched, mods_locked, 0);
+}

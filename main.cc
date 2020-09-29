@@ -28,6 +28,7 @@
 #include "actions.h"
 #include "actiondb.h"
 #include "ecres.h"
+#include "convert_keycodes.h"
 
 Glib::RefPtr<Gtk::Builder> widgets;
 
@@ -45,6 +46,8 @@ int main(int argc, char **argv)
 	config_dir += "/.config/wstroke";
 	
 	auto app = Gtk::Application::create(argc, argv, "org.wstroke.config");
+	
+	KeyCodes::init();
 	
 	// ensure that config dir exists
 	std::error_code ec;
@@ -72,8 +75,22 @@ int main(int argc, char **argv)
 	widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
 	
 	ActionDB actions_db;
-	bool config_read = actions_db.read(config_dir);
-	if(!config_read) actions_db.read(old_config_dir);
+	bool config_read;
+	try {
+		actions_db.read(config_dir);
+		config_read = true;
+	}
+	catch(std::exception& e) {
+		config_read = false;
+	}
+	if(!config_read) {
+		KeyCodes::keycode_errors = 0;
+		try { actions_db.read(old_config_dir); }
+		catch(std::exception& e) { }
+	}
+	if(KeyCodes::keycode_errors) error_dialog(_("Could not convert some keycodes. "
+				"Some Key actions have missing values"));
+	
 	
 	Actions actions(widgets, actions_db);
 	

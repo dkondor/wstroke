@@ -151,7 +151,9 @@ public:
 
 class ModAction : public Action {
 	friend class boost::serialization::access;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
+	template<class Archive> void load(Archive & ar, const unsigned int version);
+	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 protected:
 	ModAction() {}
 	uint32_t mods;
@@ -159,6 +161,10 @@ protected:
 public:
 	uint32_t get_mods() const { return mods; }
 };
+BOOST_CLASS_VERSION(ModAction, 1)
+/* version 1: save modifiers as enum wlr_keyboard_modifier
+ * this notably does not support Gdk's "virtual" modifiers */
+
 
 class SendKey : public ModAction {
 	friend class boost::serialization::access;
@@ -178,7 +184,8 @@ public:
 	uint32_t get_key() const { return key; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
-BOOST_CLASS_VERSION(SendKey, 1)
+BOOST_CLASS_VERSION(SendKey, 2)
+/* version 2: save hardware keycode in key, omit separate code variable */
 
 class SendText : public Action {
 	friend class boost::serialization::access;
@@ -465,7 +472,7 @@ public:
 
 	ActionListDiff *get_root() { return &root; }
 	
-	bool read(const std::string& config_dir);
+	void read(const std::string& config_dir);
 	/* try to save actions to the config file under the given dir
 	 * throws exception on failure */
 	void write(const std::string& config_dir);

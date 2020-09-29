@@ -29,6 +29,29 @@
 #include <boost/serialization/export.hpp>
 #include <boost/serialization/shared_ptr.hpp>
 
+#ifdef ACTIONDB_CONVERT_CODES
+#include "convert_keycodes.h"
+
+static inline uint32_t convert_modifier(uint32_t mod) {
+	return KeyCodes::convert_modifier(mod);
+}
+
+static inline uint32_t convert_keysym(uint32_t key) {
+	return KeyCodes::convert_keysym(key);
+}
+
+#else
+
+static inline uint32_t convert_modifier(G_GNUC_UNUSED uint32_t mod) {
+	throw std::runtime_error("unsupported action DB version!\nrun the wstroke-config program first to convert it to the new format\n");
+}
+
+static inline uint32_t convert_keysym(G_GNUC_UNUSED uint32_t key) {
+	throw std::runtime_error("unsupported action DB version!\nrun the wstroke-config program first to convert it to the new format\n");
+}
+
+#endif
+
 
 BOOST_CLASS_EXPORT(StrokeSet)
 
@@ -51,27 +74,34 @@ template<class Archive> void Command::serialize(Archive & ar, G_GNUC_UNUSED unsi
 	ar & cmd;
 }
 
-template<class Archive> void ModAction::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+template<class Archive> void ModAction::load(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & mods;
+	if (version < 1) mods = convert_modifier(mods);
+}
+
+template<class Archive> void ModAction::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
 	ar & boost::serialization::base_object<Action>(*this);
 	ar & mods;
 }
 
 template<class Archive> void SendKey::load(Archive & ar, const unsigned int version) {
-	guint code;
 	ar & boost::serialization::base_object<ModAction>(*this);
 	ar & key;
-	ar & code;
-	if (version < 1) {
-		bool xtest;
-		ar & xtest;
+	if (version < 2) {
+		uint32_t code;
+		ar & code;
+		if (version < 1) {
+			bool xtest;
+			ar & xtest;
+		}
+		key = convert_keysym(key);
 	}
 }
 
 template<class Archive> void SendKey::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
-	guint code = 0;
 	ar & boost::serialization::base_object<ModAction>(*this);
 	ar & key;
-	ar & code;
 }
 
 template<class Archive> void SendText::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
@@ -153,28 +183,21 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 }
 
 
-static char const * const actions_versions[5] = { "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
+static char const * const actions_versions[] = { "-wstroke", "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
 
-bool ActionDB::read(const std::string& config_dir) {
+void ActionDB::read(const std::string& config_dir) {
 	std::string filename = config_dir+"actions";
-	bool ret = false;
 	for (const char * const *v = actions_versions; *v; v++) {
 		if (std::filesystem::exists(filename + *v)) {
 			filename += *v;
-			try {
-				std::ifstream ifs(filename.c_str(), std::ios::binary);
-				if (!ifs.fail()) {
-					boost::archive::text_iarchive ia(ifs);
-					ia >> *this;
-					ret = true;
-				}
-			} catch (std::exception &e) {
-				
+			std::ifstream ifs(filename.c_str(), std::ios::binary);
+			if (!ifs.fail()) {
+				boost::archive::text_iarchive ia(ifs);
+				ia >> *this;
 			}
 			break;
 		}
 	}
-	return ret;
 }
 
 

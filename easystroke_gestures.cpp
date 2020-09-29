@@ -8,7 +8,12 @@
 #include <wayfire/view.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <gdk/gdk.h>
+#include <linux/input-event-codes.h>
+extern "C"
+{
+#include <wlr/interfaces/wlr_keyboard.h>
+}
+
 
 #include <iostream>
 #include "gesture.h"
@@ -56,20 +61,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         
         bool active = false;
         bool is_gesture = false;
-        
-        static constexpr std::array<std::pair<uint32_t, enum wlr_keyboard_modifier>, 10> modifier_match = {
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_SHIFT_MASK, WLR_MODIFIER_SHIFT),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_LOCK_MASK, WLR_MODIFIER_CAPS),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_CONTROL_MASK, WLR_MODIFIER_CTRL),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD1_MASK, WLR_MODIFIER_ALT),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD2_MASK, WLR_MODIFIER_MOD2),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD3_MASK, WLR_MODIFIER_MOD3),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD4_MASK, WLR_MODIFIER_LOGO),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD5_MASK, WLR_MODIFIER_MOD5),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_META_MASK, WLR_MODIFIER_ALT),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_SUPER_MASK, WLR_MODIFIER_LOGO)
-};
-        
+		
     public:
         wayfire_easystroke() {
             stroke_initiate = [=](uint32_t button, int32_t x, int32_t y) {
@@ -80,7 +72,12 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         void init() override {
 			std::string config_dir = getenv("HOME");
 			config_dir += "/.config/wstroke/";
-			actions.read(config_dir);
+			try {
+				actions.read(config_dir);
+			}
+			catch(std::exception& e) {
+				LOGE(e.what());
+			}
 			
 			input.init();
 			
@@ -121,7 +118,18 @@ void Command::run() {
 */
 		}
 		void visit(const SendKey* action) override {
-			LOGW("SendKey action not implemented!");
+			uint32_t mod = action->get_mods();
+			uint32_t key = action->get_key();
+			if(key) idle_generate.run_once([this, mod, key] () {
+				uint32_t t = wf::get_current_time();
+				keyboard_modifiers(t, mod, WLR_KEY_PRESSED);
+				if(mod) input.keyboard_mods(mod, 0, 0);
+				input.keyboard_key(t, key - 8, WLR_KEY_PRESSED);
+				t++;
+				input.keyboard_key(t, key - 8, WLR_KEY_RELEASED);
+				keyboard_modifiers(t, mod, WLR_KEY_RELEASED);
+				if(mod) input.keyboard_mods(0, 0, 0);
+			});
 		}
 		void visit(const SendText* action) override {
 			LOGW("SendText action not implemented!");
@@ -130,10 +138,8 @@ void Command::run() {
 			LOGW("Scroll action not implemented!");
 		}
 		void visit(const Ignore* action) override {
-			auto ignore_mods = action->get_mods();
-			uint32_t mods_latched = 0;
-			for(auto p : modifier_match) if(ignore_mods & p.first) mods_latched |= p.second;
-			input.keyboard_mods(0, mods_latched, 0);
+			uint32_t ignore_mods = action->get_mods();
+			input.keyboard_mods(0, ignore_mods, 0);
 		}
 		void visit(const Button* action) override {
 			LOGW("Button action not implemented!");
@@ -245,7 +251,17 @@ void Command::run() {
             is_gesture = false;
         }
         
+        static constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> mod_map = {
+	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_SHIFT, KEY_LEFTSHIFT),
+	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_CTRL, KEY_LEFTCTRL),
+	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_ALT, KEY_LEFTALT),
+	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_LOGO, KEY_LEFTMETA)
+};
         
+        void keyboard_modifiers(uint32_t t, uint32_t mod, enum wlr_key_state state) {
+			for(const auto& x : mod_map) 
+				if(x.first & mod) input.keyboard_key(t, x.second, state);
+		}
     
     /*****************************************************************
      * Annotate-like functionality to draw the strokes on the screen *
@@ -356,7 +372,7 @@ void Command::run() {
 		}
 };
 
-constexpr std::array<std::pair<uint32_t, enum wlr_keyboard_modifier>, 10> wayfire_easystroke::modifier_match;
+constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> wayfire_easystroke::mod_map;
 
 DECLARE_WAYFIRE_PLUGIN(wayfire_easystroke)
 

@@ -55,15 +55,16 @@ cellib = static_library('cellib', 'cellrenderertextish.c',
 		c_args: ['-w'])
 
 wconf_sources = ['main.cc', 'actiondb.cc', 'actions.cc', 'gesture.cc',
-				 'stroke_draw.cc', 'stroke.c', econf_res]
+				 'stroke_draw.cc', 'stroke.c', 'convert_keycodes.cc', econf_res]
 wconf = executable('wstroke-config', wconf_sources,
-        dependencies: [gtkmm, gdkmm, boost],
+        dependencies: [gtkmm, gdkmm, gdk, boost],
         install: true,
+        cpp_args: ['-DACTIONDB_CONVERT_CODES', '-DWLR_USE_UNSTABLE'],
         link_with: cellib)
 
 wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', 'gesture.cc', 'stroke.c']
 wslib = shared_module('easystroke', wslib_sources,
-    dependencies: [wayfire, wlroots, wlserver, boost, glibmm, gdk],
+    dependencies: [wayfire, wlroots, wlserver, boost, glibmm],
     install: true,
     install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],

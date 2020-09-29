@@ -17,7 +17,6 @@
 #define __GESTURE_H__
 
 #include "stroke.h"
-#include <gdkmm.h>
 #include <vector>
 #include <boost/shared_ptr.hpp>
 #include <boost/serialization/access.hpp>
@@ -27,9 +26,6 @@
 
 
 #define STROKE_SIZE 64
-
-// from X.h, needed to use stored values
-#define AnyModifier (1<<15)
 
 class Stroke;
 class PreStroke;
@@ -81,12 +77,6 @@ class Stroke {
 private:
 	Stroke(PreStroke &s, int trigger_, int button_, unsigned int modifiers_, bool timeout_);
 
-	Glib::RefPtr<Gdk::Pixbuf> draw_(int size, double width = 2.0, bool inv = false) const;
-	mutable Glib::RefPtr<Gdk::Pixbuf> pb[2];
-
-	static Glib::RefPtr<Gdk::Pixbuf> drawEmpty_(int);
-	static Glib::RefPtr<Gdk::Pixbuf> pbEmpty;
-
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
 	template<class Archive> void load(Archive & ar, const unsigned int version) {
 		std::vector<Point> ps;
@@ -112,7 +102,7 @@ private:
 		ar & modifiers;
 
 	}
-	template<class Archive> void save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
+	template<class Archive> void save(Archive & ar, __attribute__((unused)) unsigned int version) const {
 		std::vector<Point> ps;
 		for (unsigned int i = 0; i < size(); i++)
 			ps.push_back(points(i));
@@ -133,16 +123,11 @@ public:
 	static RStroke create(PreStroke &s, int trigger_, int button_, unsigned int modifiers_, bool timeout_) {
 		return RStroke(new Stroke(s, trigger_, button_, modifiers_, timeout_));
 	}
-        Glib::RefPtr<Gdk::Pixbuf> draw(int size, double width = 2.0, bool inv = false) const;
-	void draw(Cairo::RefPtr<Cairo::Surface> surface, int x, int y, int w, int h, double width = 2.0, bool inv = false) const;
-	void draw_svg(std::string filename) const;
-	bool show_icon();
+    bool show_icon();
 
 	static RStroke trefoil();
 	static int compare(RStroke, RStroke, double &);
-	static Glib::RefPtr<Gdk::Pixbuf> drawEmpty(int);
-	static Glib::RefPtr<Gdk::Pixbuf> drawDebug(RStroke, RStroke, int);
-
+	
 	unsigned int size() const { return stroke ? stroke_get_size(stroke.get()) : 0; }
 	bool trivial() const { return size() == 0 && button == 0; }
 	Point points(int n) const { Point p; stroke_get_point(stroke.get(), n, &p.x, &p.y); return p; }

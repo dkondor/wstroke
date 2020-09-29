@@ -8,6 +8,8 @@
 #include <wayfire/view.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <gdk/gdk.h>
+
 #include <iostream>
 #include "gesture.h"
 #include "actiondb.h"
@@ -55,17 +57,17 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         bool active = false;
         bool is_gesture = false;
         
-        static constexpr std::array<std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>, 10> modifier_match = {
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::SHIFT_MASK, WLR_MODIFIER_SHIFT),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::LOCK_MASK, WLR_MODIFIER_CAPS),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::CONTROL_MASK, WLR_MODIFIER_CTRL),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD1_MASK, WLR_MODIFIER_ALT),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD2_MASK, WLR_MODIFIER_MOD2),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD3_MASK, WLR_MODIFIER_MOD3),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD4_MASK, WLR_MODIFIER_LOGO),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::MOD5_MASK, WLR_MODIFIER_MOD5),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::META_MASK, WLR_MODIFIER_ALT),
-	std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>(Gdk::ModifierType::SUPER_MASK, WLR_MODIFIER_LOGO)
+        static constexpr std::array<std::pair<uint32_t, enum wlr_keyboard_modifier>, 10> modifier_match = {
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_SHIFT_MASK, WLR_MODIFIER_SHIFT),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_LOCK_MASK, WLR_MODIFIER_CAPS),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_CONTROL_MASK, WLR_MODIFIER_CTRL),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD1_MASK, WLR_MODIFIER_ALT),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD2_MASK, WLR_MODIFIER_MOD2),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD3_MASK, WLR_MODIFIER_MOD3),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD4_MASK, WLR_MODIFIER_LOGO),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD5_MASK, WLR_MODIFIER_MOD5),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_META_MASK, WLR_MODIFIER_ALT),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_SUPER_MASK, WLR_MODIFIER_LOGO)
 };
         
     public:
@@ -109,7 +111,14 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         
         /* visitor interface for carrying out actions */
         void visit(const Command* action) override {
-			LOGW("Command action not implemented!");
+			LOGW("Command action not implemented!");		
+/*
+void Command::run() {
+	gchar* argv[] = {(gchar*) "/bin/sh", (gchar*) "-c", NULL, NULL};
+	argv[2] = (gchar *) cmd.c_str();
+	g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
+}
+*/
 		}
 		void visit(const SendKey* action) override {
 			LOGW("SendKey action not implemented!");
@@ -198,11 +207,9 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
 				if(action) {
-					const auto& type = action->get_type();
-					const auto& label = action->get_label();
-					LOGI("Matched stroke: ", type, " -- ", label);
+					LOGI("Matched stroke: ", rr->name);
 					active_view = output->get_active_view();
-					action->run(this);
+					action->visit(this);
 				}
 				else LOGI("Unmatched stroke");
                 is_gesture = false;
@@ -349,7 +356,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		}
 };
 
-constexpr std::array<std::pair<Gdk::ModifierType, enum wlr_keyboard_modifier>, 10> wayfire_easystroke::modifier_match;
+constexpr std::array<std::pair<uint32_t, enum wlr_keyboard_modifier>, 10> wayfire_easystroke::modifier_match;
 
 DECLARE_WAYFIRE_PLUGIN(wayfire_easystroke)
 

@@ -18,6 +18,8 @@
 #include <string>
 #include <map>
 #include <set>
+#include <list>
+#include <glibmm.h>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/version.hpp>
 #include <boost/serialization/split_member.hpp>
@@ -77,8 +79,8 @@ class ButtonInfo {
 		ar & click_hold;
 	}
 public:
-	guint button;
-	guint state;
+	uint32_t button;
+	uint32_t state;
 	bool instant;
 	bool click_hold;
 	bool operator<(const ButtonInfo &bi) const { return button < bi.button; }
@@ -88,18 +90,18 @@ public:
 	void press();
 	Glib::ustring get_button_text() const;
 	bool overlap(const ButtonInfo &bi) const;
-	ButtonInfo(guint button_) : button(button_), state(0), instant(false), click_hold(false) {}
+	ButtonInfo(uint32_t button_) : button(button_), state(0), instant(false), click_hold(false) {}
 	ButtonInfo() : button(0), state(0), instant(false), click_hold(false) {}
 };
 BOOST_CLASS_VERSION(ButtonInfo, 4)
 
 
 class Modifiers {
-	guint mods;
+	uint32_t mods;
 	Glib::ustring str;
 	// OSD *osd;
 public:
-	Modifiers(guint mods_, Glib::ustring str_) : mods(mods_), str(str_) /*, osd(nullptr) */ {
+	Modifiers(uint32_t mods_, Glib::ustring str_) : mods(mods_), str(str_) /*, osd(nullptr) */ {
 /*		if (prefs.show_osd.get())
 			set_timeout(150);
 		all.insert(this);
@@ -128,8 +130,7 @@ class Action {
 public:
 /*	virtual void run() {}
 	virtual RModifiers prepare() { return RModifiers(); } */
-	virtual void run(ActionVisitor* visitor) const = 0;
-	virtual const Glib::ustring get_label() const = 0;
+	virtual void visit(ActionVisitor* visitor) const = 0;
 	virtual std::string get_type() const = 0;
 	virtual ~Action() {}
 };
@@ -143,8 +144,7 @@ public:
 	Command() {}
 	static RCommand create(const std::string &c) { return RCommand(new Command(c)); }
 	//~ virtual void run();
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
-	const Glib::ustring get_label() const override { return cmd; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::string get_type() const override { return "Command"; }
 	const std::string& get_cmd() const { return cmd; }
 };
@@ -154,84 +154,73 @@ class ModAction : public Action {
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 protected:
 	ModAction() {}
-	Gdk::ModifierType mods;
-	ModAction(Gdk::ModifierType mods_) : mods(mods_) {}
-	//~ virtual RModifiers prepare();
+	uint32_t mods;
+	ModAction(uint32_t mods_) : mods(mods_) {}
 public:
-	const Glib::ustring get_label() const override;
-	Gdk::ModifierType get_mods() const { return mods; }
+	uint32_t get_mods() const { return mods; }
 };
 
 class SendKey : public ModAction {
 	friend class boost::serialization::access;
-	guint key;
+	uint32_t key;
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
 	template<class Archive> void load(Archive & ar, const unsigned int version);
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
-	SendKey(guint key_, Gdk::ModifierType mods) :
+	SendKey(uint32_t key_, uint32_t mods) :
 		ModAction(mods), key(key_) {}
 public:
 	SendKey() {}
-	static RSendKey create(guint key, Gdk::ModifierType mods) {
+	static RSendKey create(uint32_t key, uint32_t mods) {
 		return RSendKey(new SendKey(key, mods));
 	}
 
-	//~ virtual void run();
-	//~ virtual RModifiers prepare();
-	const Glib::ustring get_label() const override;
 	std::string get_type() const override { return "SendKey"; }
-	guint get_key() const { return key; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	uint32_t get_key() const { return key; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 BOOST_CLASS_VERSION(SendKey, 1)
 
 class SendText : public Action {
 	friend class boost::serialization::access;
-	Glib::ustring text;
-	BOOST_SERIALIZATION_SPLIT_MEMBER()
-	template<class Archive> void load(Archive & ar, const unsigned int version);
-	template<class Archive> void save(Archive & ar, const unsigned int version) const;
+	std::string text;
+	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	SendText(Glib::ustring text_) : text(text_) {}
 public:
 	SendText() {}
 	static RSendText create(Glib::ustring text) { return RSendText(new SendText(text)); }
 
-	//~ virtual void run();
-	const Glib::ustring get_label() const override { return text; }
 	std::string get_type() const override { return "SendText"; }
 	const Glib::ustring get_text() const { return text; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
 class Scroll : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-	Scroll(Gdk::ModifierType mods) : ModAction(mods) {}
+	Scroll(uint32_t mods) : ModAction(mods) {}
 public:
 	Scroll() {}
-	static RScroll create(Gdk::ModifierType mods) { return RScroll(new Scroll(mods)); }
-	const Glib::ustring get_label() const override;
+	static RScroll create(uint32_t mods) { return RScroll(new Scroll(mods)); }
 	std::string get_type() const override { return "Scroll"; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
 class Ignore : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-	Ignore(Gdk::ModifierType mods) : ModAction(mods) {}
+	Ignore(uint32_t mods) : ModAction(mods) {}
 public:
 	Ignore() {}
-	static RIgnore create(Gdk::ModifierType mods) { return RIgnore(new Ignore(mods)); }
-	const Glib::ustring get_label() const override;
+	static RIgnore create(uint32_t mods) { return RIgnore(new Ignore(mods)); }
 	std::string get_type() const override { return "Ignore"; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
 class Button : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-	Button(Gdk::ModifierType mods, guint button_) : ModAction(mods), button(button_) {}
-	guint button;
+	Button(uint32_t mods, uint32_t button_) : ModAction(mods), button(button_) {}
+	uint32_t button;
 public:
 	Button() {}
 	ButtonInfo get_button_info() const;
@@ -243,12 +232,10 @@ public:
 			return 0;
 		return b->get_button_info().button;
 	}
-	static RButton create(Gdk::ModifierType mods, guint button_) { return RButton(new Button(mods, button_)); }
-	const Glib::ustring get_label() const override;
+	static RButton create(uint32_t mods, uint32_t button_) { return RButton(new Button(mods, button_)); }
 	std::string get_type() const override { return "Button"; }
-	//~ virtual void run();
-	guint get_button() const { return button; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	uint32_t get_button() const { return button; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
 class Misc : public Action {
@@ -261,13 +248,12 @@ private:
 	Misc(Type t) : type(t) {}
 public:
 	static const char *types[5];
+	static const char* get_misc_type_str(Type type);
 	Misc() {}
-	const Glib::ustring get_label() const override;
 	std::string get_type() const override { return "WM Action"; }
 	static RMisc create(Type t) { return RMisc(new Misc(t)); }
-	//~ virtual void run();
 	Type get_action_type() const { return type; }
-	void run(ActionVisitor* visitor) const override { visitor->visit(this); }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
 class StrokeSet : public std::set<RStroke> {
@@ -455,7 +441,7 @@ public:
 	void all_strokes(std::list<RStroke> &strokes) const;
 	RAction handle(RStroke s, RRanking &r) const;
 	// b1 is always reported as b2
-	void handle_advanced(RStroke s, std::map<guint, RAction> &a, std::map<guint, RRanking> &r, int b1, int b2) const;
+	void handle_advanced(RStroke s, std::map<uint32_t, RAction> &a, std::map<uint32_t, RRanking> &r, int b1, int b2) const;
 
 	~ActionListDiff();
 };
@@ -480,7 +466,9 @@ public:
 	ActionListDiff *get_root() { return &root; }
 	
 	bool read(const std::string& config_dir);
-	bool write(const std::string& config_dir);
+	/* try to save actions to the config file under the given dir
+	 * throws exception on failure */
+	void write(const std::string& config_dir);
 
 	const ActionListDiff *get_action_list(std::string wm_class) const {
 		std::map<std::string, ActionListDiff *>::const_iterator i = apps.find(wm_class);
@@ -489,5 +477,7 @@ public:
 	ActionDB();
 };
 BOOST_CLASS_VERSION(ActionDB, 3)
+
+
 
 #endif

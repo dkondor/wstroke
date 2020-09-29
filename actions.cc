@@ -15,7 +15,10 @@
  */
 #include "actions.h"
 #include "actiondb.h"
+#include "stroke_draw.h"
 #include <glibmm/i18n.h>
+#include <gdkmm.h>
+
 #include <X11/XKBlib.h>
 //~ #include "grabber.h"
 #include "cellrenderertextish.h"
@@ -88,7 +91,9 @@ const char *type_info_to_name(const std::type_info *info) {
 	return "";
 }
 
-static void on_actions_cell_data_arg(GtkTreeViewColumn *tree_column, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data) {
+static Glib::ustring get_action_label(RAction action);
+
+static void on_actions_cell_data_arg(G_GNUC_UNUSED GtkTreeViewColumn *tree_column, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data) {
 	GtkTreePath *path = gtk_tree_model_get_path(tree_model, iter);
 	gchar *path_string = gtk_tree_path_to_string(path);
 	((Actions *)data)->on_cell_data_arg(cell, path_string);
@@ -97,7 +102,7 @@ static void on_actions_cell_data_arg(GtkTreeViewColumn *tree_column, GtkCellRend
 }
 
 static void on_actions_accel_edited(CellRendererTextish *, gchar *path, GdkModifierType mods, guint keyval, gpointer data) {
-	Actions* actions = (Actions*)data;
+	// Actions* actions = (Actions*)data;
 	// guint key = XkbKeycodeToKeysym(actions->display(), code, 0, 0);
 	((Actions *)data)->on_accel_edited(path, keyval, mods);
 }
@@ -689,10 +694,10 @@ void Actions::update_row(const Gtk::TreeRow &row) {
 	bool deleted, stroke, name, action;
 	RStrokeInfo si = action_list->get_info(row[cols.id], &deleted, &stroke, &name, &action);
 	row[cols.stroke] = !si->strokes.empty() && *si->strokes.begin() ? 
-		(*si->strokes.begin())->draw(STROKE_SIZE, stroke ? 4.0 : 2.0) : Stroke::drawEmpty(STROKE_SIZE);
+		StrokeDrawer::draw((*si->strokes.begin()), STROKE_SIZE, stroke ? 4.0 : 2.0) : StrokeDrawer::drawEmpty(STROKE_SIZE);
 	row[cols.name] = si->name;
 	row[cols.type] = si->action ? type_info_to_name(&typeid(*si->action)) : "";
-	row[cols.arg]  = si->action ? si->action->get_label() : "";
+	row[cols.arg]  = get_action_label(si->action);
 	row[cols.deactivated] = deleted;
 	row[cols.name_bold] = name;
 	row[cols.action_bold] = action;
@@ -742,7 +747,7 @@ public:
 };
 */
 
-void Actions::on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column) {
+void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED Gtk::TreeViewColumn* column) {
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Gtk::MessageDialog *dialog;
 	widgets->get_widget("dialog_record", dialog);
@@ -883,19 +888,19 @@ void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModi
 	Type type = from_name(row[cols.type]);
 	if (type == KEY) {
 		RSendKey send_key = SendKey::create(accel_key, accel_mods);
-		Glib::ustring str = send_key->get_label();
+		Glib::ustring str = get_action_label(send_key);
 		if (row[cols.arg] == str)
 			return;
 		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(send_key));
 	} else if (type == SCROLL) {
 		RScroll scroll = Scroll::create(accel_mods);
-		Glib::ustring str = scroll->get_label();
+		Glib::ustring str = get_action_label(scroll);
 		if (row[cols.arg] == str)
 			return;
 		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(scroll));
 	} else if (type == IGNORE) {
 		RIgnore ignore = Ignore::create(accel_mods);
-		Glib::ustring str = ignore->get_label();
+		Glib::ustring str = get_action_label(ignore);
 		if (row[cols.arg] == str)
 			return;
 		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(ignore));
@@ -906,7 +911,7 @@ void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModi
 
 void Actions::on_combo_edited(const gchar *path_string, guint item) {
 	RMisc misc = Misc::create((Misc::Type)item);
-	Glib::ustring str = misc->get_label();
+	Glib::ustring str = get_action_label(misc);
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	if (row[cols.arg] == str)
 		return;
@@ -919,11 +924,11 @@ void Actions::on_something_editing_canceled() {
 	editing_new = false;
 }
 
-void Actions::on_something_editing_started(Gtk::CellEditable* editable, const Glib::ustring& path) {
+void Actions::on_something_editing_started(G_GNUC_UNUSED Gtk::CellEditable* editable, G_GNUC_UNUSED const Glib::ustring& path) {
 	editing = true;
 }
 
-void Actions::on_arg_editing_started(GtkCellEditable *editable, const gchar *path) {
+void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_GNUC_UNUSED const gchar *path) {
 	tv.grab_focus();
 	Gtk::TreeRow row(*tm->get_iter(path));
 	if (from_name(row[cols.type]) != BUTTON)
@@ -1084,6 +1089,74 @@ void SelectButton::on_any_toggled() {
 	toggle_super->set_sensitive(!any);
 }
 
+
+
+struct ActionLabel : public ActionVisitor {
+	protected:
+		Glib::ustring label;
+	public:
+		void visit(const Command* action) override {
+			label = action->get_cmd();
+		}
+		void visit(const SendKey* action) override {
+			uint32_t mods = action->get_mods();
+			label = Gtk::AccelGroup::get_label(action->get_key(), static_cast<Gdk::ModifierType>(mods));
+		}
+		void visit(const SendText* action) override {
+			label = action->get_text();
+		}
+		void visit(const Scroll* action) override {
+			uint32_t mods = action->get_mods();
+			if(mods) label = Gtk::AccelGroup::get_label(0, static_cast<Gdk::ModifierType>(mods)) + _(" + Scroll");
+			else label = _("Scroll");
+		}
+		void visit(const Ignore* action) override {
+			uint32_t mods = action->get_mods();
+			if (mods) label = Gtk::AccelGroup::get_label(0, static_cast<Gdk::ModifierType>(mods));
+			else label = _("Ignore");
+		}
+		void visit(const Button* action) override {
+			label = action->get_button_info().get_button_text();
+		}
+		void visit(const Misc* action) override {
+			auto t = action->get_action_type();
+			label = Misc::get_misc_type_str(t);
+		}
+		
+		const Glib::ustring get_label() const { return label; }
+};
+
+static Glib::ustring get_action_label(RAction action) {
+	if(!action) return "";
+	ActionLabel label;
+	action->visit(&label);
+	return label.get_label();
+}
+
+ButtonInfo Button::get_button_info() const {
+	ButtonInfo bi;
+	bi.button = button;
+	bi.state = mods;
+	return bi;
+}
+
+const char *Misc::types[5] = { N_("None"), N_("Close"), N_("Minimize"), nullptr };
+
+const char* Misc::get_misc_type_str(Type type) { return _(types[static_cast<int>(type)]); }
+
+
+Glib::ustring ButtonInfo::get_button_text() const {
+	Glib::ustring str;
+	if (instant)
+		str += _("(Instantly) ");
+	if (click_hold)
+		str += _("(Click & Hold) ");
+	if (state == AnyModifier)
+		str += Glib::ustring() + "(" + _("Any Modifier") + " +) ";
+	else
+		str += Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)state);
+	return str + Glib::ustring::compose(_("Button %1"), button);
+}
 
 
 

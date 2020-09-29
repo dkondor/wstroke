@@ -81,8 +81,17 @@ int main(int argc, char **argv)
 	widgets->get_widget("main", win);
 	
 	app->run(*win, argc, argv);
+	try {
+		actions_db.write(config_dir);
+	} catch (std::exception &e) {
+		printf(_("Error: Couldn't save action database: %s.\n"), e.what());
+		// good_state = false;
+		error_dialog(Glib::ustring::compose(_( "Couldn't save %1.  Your changes will be lost.  "
+				"Make sure that \"%2\" is a directory and that you have write access to it.  "
+				"You can change the configuration directory "
+				"using the -c or --config-dir command line options."), _("actions"), config_dir));
+	}
 	
-	actions_db.write(config_dir);
 	
 	delete win;
 	return 0;

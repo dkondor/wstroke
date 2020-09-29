@@ -14,14 +14,12 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "actiondb.h"
-#include <glibmm/i18n.h>
-#include <gdkmm.h>
-#include <gtkmm.h>
 
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <filesystem>
+#include <glibmm/i18n.h>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/map.hpp>
@@ -30,6 +28,7 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/export.hpp>
 #include <boost/serialization/shared_ptr.hpp>
+
 
 BOOST_CLASS_EXPORT(StrokeSet)
 
@@ -75,17 +74,9 @@ template<class Archive> void SendKey::save(Archive & ar, G_GNUC_UNUSED unsigned 
 	ar & code;
 }
 
-template<class Archive> void SendText::load(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+template<class Archive> void SendText::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
 	ar & boost::serialization::base_object<Action>(*this);
-	std::string str;
-	ar & str;
-	text = str;
-}
-
-template<class Archive> void SendText::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
-	ar & boost::serialization::base_object<Action>(*this);
-	std::string str(text);
-	ar & str;
+	ar & text;
 }
 
 template<class Archive> void Scroll::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
@@ -117,31 +108,6 @@ template<class Archive> void StrokeInfo::serialize(Archive & ar, const unsigned 
 	ar & name;
 }
 
-using namespace std;
-
-/*
-void Command::run() {
-	gchar* argv[] = {(gchar*) "/bin/sh", (gchar*) "-c", NULL, NULL};
-	argv[2] = (gchar *) cmd.c_str();
-	g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
-}
-*/
-
-ButtonInfo Button::get_button_info() const {
-	ButtonInfo bi;
-	bi.button = button;
-	bi.state = mods;
-	return bi;
-}
-
-
-const Glib::ustring Button::get_label() const {
-	return get_button_info().get_button_text();
-}
-
-const char *Misc::types[5] = { N_("None"), N_("Close"), N_("Minimize"), nullptr };
-
-const Glib::ustring Misc::get_label() const { return _(types[static_cast<int>(type)]); }
 
 template<class Archive> void ActionListDiff::serialize(Archive & ar, const unsigned int version) {
 	ar & deleted;
@@ -187,22 +153,22 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 }
 
 
-static const char *actions_versions[] = { "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
+static char const * const actions_versions[5] = { "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
 
 bool ActionDB::read(const std::string& config_dir) {
 	std::string filename = config_dir+"actions";
 	bool ret = false;
-	for (const char **v = actions_versions; *v; v++) {
+	for (const char * const *v = actions_versions; *v; v++) {
 		if (std::filesystem::exists(filename + *v)) {
 			filename += *v;
 			try {
-				ifstream ifs(filename.c_str(), ios::binary);
+				std::ifstream ifs(filename.c_str(), std::ios::binary);
 				if (!ifs.fail()) {
 					boost::archive::text_iarchive ia(ifs);
 					ia >> *this;
 					ret = true;
 				}
-			} catch (exception &e) {
+			} catch (std::exception &e) {
 				
 			}
 			break;
@@ -211,34 +177,21 @@ bool ActionDB::read(const std::string& config_dir) {
 	return ret;
 }
 
-static void error_dialog(const Glib::ustring &text) {
-	Gtk::MessageDialog dialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
-	dialog.show();
-	dialog.run();
-}
 
-bool ActionDB::write(const std::string& config_dir) {
+
+
+void ActionDB::write(const std::string& config_dir) {
 	std::string filename = config_dir+"actions"+actions_versions[0];
 	std::string tmp = filename + ".tmp";
-	bool good_state = true;
-	try {
-		ofstream ofs(tmp.c_str());
-		boost::archive::text_oarchive oa(ofs);
-		oa << (const ActionDB &)(*this);
-		ofs.close();
-		if (rename(tmp.c_str(), filename.c_str()))
-			throw std::runtime_error(_("rename() failed"));
-		printf("Saved actions.\n");
-	} catch (exception &e) {
-		printf(_("Error: Couldn't save action database: %s.\n"), e.what());
-		good_state = false;
-		error_dialog(Glib::ustring::compose(_( "Couldn't save %1.  Your changes will be lost.  "
-				"Make sure that \"%2\" is a directory and that you have write access to it.  "
-				"You can change the configuration directory "
-				"using the -c or --config-dir command line options."), _("actions"), config_dir));
-	}
-	return good_state;
+	std::ofstream ofs(tmp.c_str());
+	boost::archive::text_oarchive oa(ofs);
+	oa << (const ActionDB &)(*this);
+	ofs.close();
+	if (rename(tmp.c_str(), filename.c_str()))
+		throw std::runtime_error(_("rename() failed"));
+	printf("Saved actions.\n");
 }
+
 
 
 RStrokeInfo ActionListDiff::get_info(Unique *id, bool *deleted, bool *stroke, bool *name, bool *action) const {
@@ -322,8 +275,8 @@ RAction ActionListDiff::handle(RStroke s, RRanking &r) const {
 			if (match < 0)
 				continue;
 			RStrokeInfo si = get_info(i->first);
-			r->r.insert(pair<double, pair<std::string, RStroke> >
-					(score, pair<std::string, RStroke>(si->name, *j)));
+			r->r.insert(std::pair<double, std::pair<std::string, RStroke> >
+					(score, std::pair<std::string, RStroke>(si->name, *j)));
 			if (score > r->score) {
 				r->score = score;
 				if (match) {
@@ -364,8 +317,8 @@ void ActionListDiff::handle_advanced(RStroke s, std::map<guint, RAction> &as,
 				r->score = -1;
 			}
 			RStrokeInfo si = get_info(i->first);
-			r->r.insert(pair<double, pair<std::string, RStroke> >
-					(score, pair<std::string, RStroke>(si->name, *j)));
+			r->r.insert(std::pair<double, std::pair<std::string, RStroke> >
+					(score, std::pair<std::string, RStroke>(si->name, *j)));
 			if (score > r->score) {
 				r->score = score;
 				if (match) {
@@ -408,30 +361,6 @@ RModifiers SendKey::prepare() {
 }
 */
 
-const Glib::ustring SendKey::get_label() const {
-	return Gtk::AccelGroup::get_label(key, mods);
-}
-
-const Glib::ustring ModAction::get_label() const {
-	if (!mods)
-		return _("No Modifiers");
-	Glib::ustring label = Gtk::AccelGroup::get_label(0, mods);
-	return label.substr(0,label.size()-1);
-}
-
-const Glib::ustring Scroll::get_label() const {
-	if (mods)
-		return ModAction::get_label() + _(" + Scroll");
-	else
-		return _("Scroll");
-}
-
-const Glib::ustring Ignore::get_label() const {
-	if (mods)
-		return ModAction::get_label();
-	else
-		return _("Ignore");
-}
 
 /*
 void SendText::run() {
@@ -455,7 +384,7 @@ void Misc::run() {
 			return;
 	}
 }
-*/
+
 
 bool ButtonInfo::overlap(const ButtonInfo &bi) const {
 	if (button != bi.button)
@@ -466,20 +395,8 @@ bool ButtonInfo::overlap(const ButtonInfo &bi) const {
 		~Gdk::ModifierType::MOD2_MASK);
 }
 
-Glib::ustring ButtonInfo::get_button_text() const {
-	Glib::ustring str;
-	if (instant)
-		str += _("(Instantly) ");
-	if (click_hold)
-		str += _("(Click & Hold) ");
-	if (state == AnyModifier)
-		str += Glib::ustring() + "(" + _("Any Modifier") + " +) ";
-	else
-		str += Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)state);
-	return str + Glib::ustring::compose(_("Button %1"), button);
-}
-
 bool mods_equal(RModifiers m1, RModifiers m2) {
 	return m1 && m2 && *m1 == *m2;
 }
+*/
 

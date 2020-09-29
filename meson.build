@@ -14,8 +14,7 @@ project(
 )
 
 # dependencies for loadable plugin
-gtkmm = dependency('gtkmm-3.0')
-gdkmm = dependency('gdkmm-3.0')
+glibmm = dependency('glibmm-2.4')
 boost = dependency('boost', modules: ['serialization'], static: false)
 wayfire = dependency('wayfire')
 wlroots = dependency('wlroots')
@@ -23,9 +22,12 @@ wlserver = dependency('wayland-server')
 
 
 # additional dependencies for GUI
+gtkmm = dependency('gtkmm-3.0')
+gdkmm = dependency('gdkmm-3.0')
 glib    = dependency('glib-2.0')
 gobject = dependency('gobject-2.0')
 gtk     = dependency('gtk+-3.0')
+gdk     = dependency('gdk-3.0')
 
 gnome = import('gnome')
 econf_res = gnome.compile_resources(
@@ -53,7 +55,7 @@ cellib = static_library('cellib', 'cellrenderertextish.c',
 		c_args: ['-w'])
 
 wconf_sources = ['main.cc', 'actiondb.cc', 'actions.cc', 'gesture.cc',
-				 'stroke.c', econf_res]
+				 'stroke_draw.cc', 'stroke.c', econf_res]
 wconf = executable('wstroke-config', wconf_sources,
         dependencies: [gtkmm, gdkmm, boost],
         install: true,
@@ -61,7 +63,7 @@ wconf = executable('wstroke-config', wconf_sources,
 
 wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', 'gesture.cc', 'stroke.c']
 wslib = shared_module('easystroke', wslib_sources,
-    dependencies: [wayfire, wlroots, wlserver, boost, gtkmm, gdkmm],
+    dependencies: [wayfire, wlroots, wlserver, boost, glibmm, gdk],
     install: true,
     install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],

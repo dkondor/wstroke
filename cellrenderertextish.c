@@ -820,7 +820,7 @@ cell_editable_accel_on_key (CellEditableAccel* self,
 	CellRendererTextish* _tmp3_;
 	const gchar* _tmp4_;
 	GdkModifierType _tmp5_;
-	guint _tmp6_;
+	guint16 _tmp6_;
 	g_return_val_if_fail (self != NULL, FALSE);
 	g_return_val_if_fail (event != NULL, FALSE);
 	_tmp0_ = event->is_modifier;
@@ -848,8 +848,8 @@ cell_editable_accel_on_key (CellEditableAccel* self,
 	_tmp3_ = self->priv->parent;
 	_tmp4_ = self->priv->path;
 	_tmp5_ = mods;
-	_tmp6_ = event->keyval;
-	g_signal_emit (_tmp3_, cell_renderer_textish_signals[CELL_RENDERER_TEXTISH_KEY_EDITED_SIGNAL], 0, _tmp4_, _tmp5_, _tmp6_);
+	_tmp6_ = event->hardware_keycode;
+	g_signal_emit (_tmp3_, cell_renderer_textish_signals[CELL_RENDERER_TEXTISH_KEY_EDITED_SIGNAL], 0, _tmp4_, _tmp5_, (guint) _tmp6_);
 	result = TRUE;
 	return result;
 }

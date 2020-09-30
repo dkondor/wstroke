@@ -16,6 +16,7 @@
 #include "actions.h"
 #include "actiondb.h"
 #include "stroke_draw.h"
+#include "convert_keycodes.h"
 #include <glibmm/i18n.h>
 #include <gdkmm.h>
 
@@ -101,10 +102,10 @@ static void on_actions_cell_data_arg(G_GNUC_UNUSED GtkTreeViewColumn *tree_colum
 	gtk_tree_path_free(path);
 }
 
-static void on_actions_accel_edited(CellRendererTextish *, gchar *path, GdkModifierType mods, guint keyval, gpointer data) {
+static void on_actions_accel_edited(CellRendererTextish *, gchar *path, GdkModifierType mods, guint code, gpointer data) {
 	// Actions* actions = (Actions*)data;
 	// guint key = XkbKeycodeToKeysym(actions->display(), code, 0, 0);
-	((Actions *)data)->on_accel_edited(path, keyval, mods);
+	((Actions *)data)->on_accel_edited(path, code, mods);
 }
 
 static void on_actions_combo_edited(CellRendererTextish *, gchar *path, guint row, gpointer data) {
@@ -1100,18 +1101,22 @@ struct ActionLabel : public ActionVisitor {
 		}
 		void visit(const SendKey* action) override {
 			uint32_t mods = action->get_mods();
-			label = Gtk::AccelGroup::get_label(action->get_key(), static_cast<Gdk::ModifierType>(mods));
+			mods = KeyCodes::add_virtual_modifiers(mods);
+			uint32_t keysym = KeyCodes::convert_keycode(action->get_key());
+			label = Gtk::AccelGroup::get_label(keysym, static_cast<Gdk::ModifierType>(mods));
 		}
 		void visit(const SendText* action) override {
 			label = action->get_text();
 		}
 		void visit(const Scroll* action) override {
 			uint32_t mods = action->get_mods();
+			mods = KeyCodes::add_virtual_modifiers(mods);
 			if(mods) label = Gtk::AccelGroup::get_label(0, static_cast<Gdk::ModifierType>(mods)) + _(" + Scroll");
 			else label = _("Scroll");
 		}
 		void visit(const Ignore* action) override {
 			uint32_t mods = action->get_mods();
+			mods = KeyCodes::add_virtual_modifiers(mods);
 			if (mods) label = Gtk::AccelGroup::get_label(0, static_cast<Gdk::ModifierType>(mods));
 			else label = _("Ignore");
 		}

@@ -40,11 +40,11 @@ static constexpr std::array<std::pair<uint32_t, enum wlr_keyboard_modifier>, 10>
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_LOCK_MASK, WLR_MODIFIER_CAPS),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_CONTROL_MASK, WLR_MODIFIER_CTRL),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD1_MASK, WLR_MODIFIER_ALT),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_META_MASK, WLR_MODIFIER_ALT),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD2_MASK, WLR_MODIFIER_MOD2),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD3_MASK, WLR_MODIFIER_MOD3),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD4_MASK, WLR_MODIFIER_LOGO),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD5_MASK, WLR_MODIFIER_MOD5),
-	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_META_MASK, WLR_MODIFIER_ALT),
+	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_MOD4_MASK, WLR_MODIFIER_LOGO),
 	std::pair<uint32_t, enum wlr_keyboard_modifier>(GDK_SUPER_MASK, WLR_MODIFIER_LOGO)
 };
 
@@ -55,6 +55,7 @@ uint32_t KeyCodes::convert_modifier(uint32_t mod) {
 }
 
 uint32_t KeyCodes::convert_keysym(uint32_t key) {
+	if(!keymap) return 0;
 	uint32_t ret = 0;
 	GdkKeymapKey* keys = nullptr;
 	gint n_keys = 0;
@@ -74,4 +75,22 @@ uint32_t KeyCodes::convert_keysym(uint32_t key) {
 	return ret;
 }
 
+uint32_t KeyCodes::convert_keycode(uint32_t code) {
+	if(!keymap) return 0;
+	GdkKeymapKey key;
+	key.keycode = code;
+	key.level = 0;
+	key.group = 0;
+	return gdk_keymap_lookup_key(keymap, &key);
+}
+
+uint32_t KeyCodes::add_virtual_modifiers(uint32_t mod) {
+	/* currently this only takes care of super
+	 * additional logic might be needed on e.g. Apple keyboards */
+	if(mod & WLR_MODIFIER_LOGO) {
+		mod ^= WLR_MODIFIER_LOGO;
+		mod |= GDK_SUPER_MASK;
+	}
+	return mod;
+}
 

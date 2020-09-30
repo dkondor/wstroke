@@ -96,7 +96,7 @@ class CellEditableAccel : Gtk.EventBox, Gtk.CellEditable {
 		editing_done();
 		remove_widget();
 
-		parent.key_edited(path, mods, event.keyval);
+		parent.key_edited(path, mods, event.hardware_keycode);
 		return true;
 	}
 	void on_editing_done() {

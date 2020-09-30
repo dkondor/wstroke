@@ -26,8 +26,18 @@
 
 class KeyCodes {
 	public:
+		/* convert from a combination of Gdk modifier constants to the
+		 * WLR modifier enum constants (take care of "virtual" modifiers
+		 * like SUPER, ALT, etc.) */
 		static uint32_t convert_modifier(uint32_t mod);
+		/* add back "virtual" modifiers -- calls the corresponding GDK function */
+		static uint32_t add_virtual_modifiers(uint32_t mod);
+		/* try to convert a keysym to a hardware keycode; returns the
+		 * keycode or zero if it was not found */
 		static uint32_t convert_keysym(uint32_t key);
+		/* convert a hardware keycode to a keysym (using level = 0 and
+		 * group = 0) for the purpose of displaying it to the user */
+		static uint32_t convert_keycode(uint32_t code);
 		
 		static void init();
 		

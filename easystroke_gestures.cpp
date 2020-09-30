@@ -83,7 +83,11 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
 			}
 			
-			input.init();
+			/* start the headless backend, but not instantly since it
+			 * might be started automatically by the core multi_backend */
+			idle_generate.run_once([this] () {
+				input.init();
+			});
 			
 			/* copied from opengl.cpp */
 			OpenGL::render_begin();

@@ -49,13 +49,8 @@ void input_headless::init() {
 		return;
 	}
 	/* 3. start the new headless backend */
-	if(!wlr_backend_start(headless_backend)) {
-		LOGE("Cannot start headless wlroots backend!");
-		wlr_multi_backend_remove(core.backend, headless_backend);
-		wlr_backend_destroy(headless_backend);
-		headless_backend = nullptr;
-		return;
-	}
+	start_backend();
+	
 	/* 4. create the new input device */
 	input_pointer = wlr_headless_add_input_device(headless_backend, WLR_INPUT_DEVICE_POINTER);
 	if(!input_pointer) {
@@ -68,6 +63,13 @@ void input_headless::init() {
 		LOGE("Cannot create keyboard device!");
 		fini();
 		return;
+	}
+}
+
+void input_headless::start_backend() {
+	if(!wlr_backend_start(headless_backend)) {
+		LOGE("Cannot start headless wlroots backend!");
+		fini();
 	}
 }
 

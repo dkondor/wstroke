@@ -44,6 +44,7 @@ class input_headless {
 		~input_headless() { fini(); }
 	
 	protected:
+		void start_backend();
 		struct wlr_backend* headless_backend = nullptr;
 		struct wlr_input_device* input_pointer = nullptr;
 		struct wlr_input_device* input_keyboard = nullptr;

@@ -22,10 +22,6 @@
 #include "stroke_draw.h"
 #include <gtkmm.h>
 
-// from X.h, needed to use stored values
-#define AnyModifier (1<<15)
-
-
 Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::pbEmpty;
 
 Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::drawEmpty(int size) {

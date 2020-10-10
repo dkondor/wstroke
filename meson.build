@@ -94,8 +94,9 @@ cellib = static_library('cellib', 'cellrenderertextish.c',
 		dependencies: [glib, gobject, gtk, protos],
 		c_args: ['-w'])
 
-wconf_sources = ['main.cc', 'actiondb.cc', 'actions.cc', 'gesture.cc', 'stroke_draw.cc',
-                 'stroke.c', 'convert_keycodes.cc', 'input_inhibitor.c', econf_res]
+wconf_sources = ['main.cc', 'actiondb.cc', 'actions.cc', 'gesture.cc',
+                 'stroke_draw.cc', 'stroke.c', 'convert_keycodes.cc',
+                 'stroke_drawing_area.cpp', 'input_inhibitor.c', econf_res]
 wconf = executable('wstroke-config', wconf_sources,
         dependencies: [gtkmm, gdkmm, gdk, boost, protos],
         install: true,

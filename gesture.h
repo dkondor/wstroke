@@ -24,6 +24,11 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/split_member.hpp>
 
+// from X.h, needed to use stored values
+#ifndef AnyModifier
+#define AnyModifier (1<<15)
+#endif
+
 
 #define STROKE_SIZE 64
 

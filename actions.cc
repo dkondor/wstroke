@@ -23,6 +23,7 @@
 #include <X11/XKBlib.h>
 //~ #include "grabber.h"
 #include "cellrenderertextish.h"
+#include "stroke_drawing_area.h"
 
 #include <typeinfo>
 
@@ -704,18 +705,13 @@ void Actions::update_row(const Gtk::TreeRow &row) {
 	row[cols.action_bold] = action;
 }
 
-/*
-extern boost::shared_ptr<sigc::slot<void, RStroke> > stroke_action;
-Source<bool> recording(false);
-*/
-/*
 class Actions::OnStroke {
 	Actions *parent;
 	Gtk::Dialog *dialog;
 	Gtk::TreeRow &row;
-	RStroke stroke;
-	bool run() {
-		if (stroke->button == 0 && stroke->trivial()) {
+public:
+	void run(RStroke stroke) {
+/*		if (stroke->button == 0 && stroke->trivial()) {
 			grabber->queue_suspend();
 			Glib::ustring msg = Glib::ustring::compose(
 					_("You are about to bind an action to a single click.  "
@@ -727,7 +723,7 @@ class Actions::OnStroke {
 			grabber->queue_resume();
 			if (abort)
 				return false;
-		}
+		} */
 		StrokeSet strokes;
 		strokes.insert(stroke);
 		parent->action_list->set_strokes(row[parent->cols.id], strokes);
@@ -735,26 +731,32 @@ class Actions::OnStroke {
 		parent->on_selection_changed();
 		update_actions();
 		dialog->response(0);
-		return false;
 	}
-public:
 	OnStroke(Actions *parent_, Gtk::Dialog *dialog_, Gtk::TreeRow &row_) : parent(parent_), dialog(dialog_), row(row_) {}
-	void delayed_run(RStroke stroke_) {
+/*	void delayed_run(RStroke stroke_) {
 		stroke = stroke_;
 		Glib::signal_idle().connect(sigc::mem_fun(*this, &OnStroke::run));
 		stroke_action.reset();
 		recording.set(false);
-	}
+	} */
 };
-*/
+
+
 
 void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED Gtk::TreeViewColumn* column) {
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Gtk::MessageDialog *dialog;
+	static SRArea *drawarea = nullptr;
 	widgets->get_widget("dialog_record", dialog);
-	dialog->set_message(_("Record a New Stroke"));
-	dialog->set_secondary_text(Glib::ustring::compose(_("The next stroke will be associated with the action \"%1\".  You can draw it anywhere on the screen (except for the two buttons below)."), row[cols.name]));
-
+	dialog->set_secondary_text(Glib::ustring::compose(_("The next stroke will be associated with the action \"%1\".  You can draw it in the area below, using any pointer button."), row[cols.name]));
+	
+	if(!drawarea) {
+		drawarea = Gtk::manage(new SRArea());
+		drawarea->set_size_request(600, 400);
+		auto box = dialog->get_content_area();
+		box->pack_start(*drawarea, true, false, 0);
+	}
+	
 	static Gtk::Button *del = 0, *cancel = 0;
 	if (!del) {
 		widgets->get_widget("button_record_delete", del);
@@ -770,16 +772,21 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	if (si)
 		del->set_sensitive(si->strokes.size() != 0);
 
-/*	OnStroke ps(this, dialog, row);
-	stroke_action.reset(new sigc::slot<void, RStroke>(sigc::mem_fun(ps, &OnStroke::delayed_run)));
-	recording.set(true);
-*/
-	dialog->show();
+	OnStroke ps(this, dialog, row);
+	sigc::connection sig = drawarea->stroke_recorded.connect(sigc::mem_fun(ps, &OnStroke::run));
+	
+/*	stroke_action.reset(new sigc::slot<void, RStroke>(sigc::mem_fun(ps, &OnStroke::delayed_run)));
+	recording.set(true); */
+
+	dialog->show_all();
 	cancel->grab_focus();
 	int response = dialog->run();
 	dialog->hide();
+	sig.disconnect();
+	drawarea->clear();
 /*	stroke_action.reset();
 	recording.set(false); */
+	// delete dialog;
 	if (response != 1)
 		return;
 

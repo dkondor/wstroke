@@ -19,18 +19,20 @@ sudo ninja -C build install
 
 ### Running
 
-If correctly installed, it will show up as "Easystroke mouse gestures" plugin in WCM and can be enabled from there. Also, the mouse button for gestures can be changed there. Gesture actions can be configured by running `wstroke-config`. Configuration files are stored under `~/.config/wstroke`, in a format compatible with original Easystroke. `wstroke-config` will read and copy any configuration from under `~/.easystroke` if this directory is empty.
+If correctly installed, it will show up as "Easystroke mouse gestures" plugin in WCM and can be enabled from there. Also, the mouse button for gestures can be changed there. Gesture actions can be configured by running `wstroke-config`. Configuration files are stored under `~/.config/wstroke`, in a format slightly updated from the original Easystroke. `wstroke-config` will read and convert any configuration from under `~/.easystroke` if this directory is empty.
 
 
 ### What works
 
- - Reading saved strokes from "actions" files created with Easystroke.
+ - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing stokes (will log output with matches).
  - Closing and minimizing the active view (select "WM Actions" and the appropriate action).
+ - Generating keypresses ("Key" action).
  - Getting keybindings and mouse button bindings in the configuration for actions.
+ - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
  
 ### What does not work
 
- - Any other action (generating key or button press, scroll, running commands, etc.)
- - Recording new strokes / editing strokes.
+ - Any other action (ignore, button press, scroll, running commands, etc.)
  - Identifying applications / adding new applications.
+

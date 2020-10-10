@@ -77,8 +77,7 @@ int main(int argc, char **argv)
 	ActionDB actions_db;
 	bool config_read;
 	try {
-		actions_db.read(config_dir);
-		config_read = true;
+		config_read = actions_db.read(config_dir);
 	}
 	catch(std::exception& e) {
 		config_read = false;

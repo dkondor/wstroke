@@ -472,7 +472,10 @@ public:
 
 	ActionListDiff *get_root() { return &root; }
 	
-	void read(const std::string& config_dir);
+	/* try to read actions from a config file under the given dir 
+	 * returns false if no config file found, throws an exception
+	 * on other errors */
+	bool read(const std::string& config_dir);
 	/* try to save actions to the config file under the given dir
 	 * throws exception on failure */
 	void write(const std::string& config_dir);

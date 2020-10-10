@@ -185,7 +185,7 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 
 static char const * const actions_versions[] = { "-wstroke", "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
 
-void ActionDB::read(const std::string& config_dir) {
+bool ActionDB::read(const std::string& config_dir) {
 	std::string filename = config_dir+"actions";
 	for (const char * const *v = actions_versions; *v; v++) {
 		if (std::filesystem::exists(filename + *v)) {
@@ -195,9 +195,10 @@ void ActionDB::read(const std::string& config_dir) {
 				boost::archive::text_iarchive ia(ifs);
 				ia >> *this;
 			}
-			break;
+			return true;
 		}
 	}
+	return false;
 }
 
 

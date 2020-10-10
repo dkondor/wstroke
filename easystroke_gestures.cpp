@@ -72,11 +72,15 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         void init() override {
 			std::string config_dir = getenv("HOME");
 			config_dir += "/.config/wstroke/";
+			bool config_read = false;
 			try {
-				actions.read(config_dir);
+				config_read = actions.read(config_dir);
 			}
 			catch(std::exception& e) {
 				LOGE(e.what());
+			}
+			if(!config_read) {
+				LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
 			}
 			
 			input.init();

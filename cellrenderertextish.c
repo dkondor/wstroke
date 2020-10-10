@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <gdk/gdk.h>
+#include <input_inhibitor.h>
 
 
 #define TYPE_CELL_RENDERER_TEXTISH (cell_renderer_textish_get_type ())
@@ -795,6 +796,7 @@ cell_editable_accel_real_start_editing (CellEditableAccel* self,
 	}
 	_tmp1_ = gtk_widget_get_window ((GtkWidget*) self);
 	gdk_keyboard_grab (_tmp1_, FALSE, _tmp0_);
+	input_inhibitor_grab ();
 	g_signal_connect_object ((GtkWidget*) self, "key-press-event", (GCallback) _cell_editable_accel_on_key_gtk_widget_key_press_event, self, 0);
 }
 
@@ -842,7 +844,7 @@ cell_editable_accel_on_key (CellEditableAccel* self,
 		break;
 	}
 	_tmp2_ = event->state;
-	mods = _tmp2_ & gtk_accelerator_get_default_mod_mask ();
+	mods = _tmp2_;
 	gtk_cell_editable_editing_done ((GtkCellEditable*) self);
 	gtk_cell_editable_remove_widget ((GtkCellEditable*) self);
 	_tmp3_ = self->priv->parent;
@@ -861,6 +863,7 @@ cell_editable_accel_on_editing_done (CellEditableAccel* self)
 	g_return_if_fail (self != NULL);
 	gtk_grab_remove ((GtkWidget*) self);
 	gdk_keyboard_ungrab ((guint32) GDK_CURRENT_TIME);
+	input_inhibitor_ungrab ();
 }
 
 

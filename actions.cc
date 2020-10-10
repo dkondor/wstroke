@@ -884,7 +884,7 @@ void Actions::on_text_edited(const gchar *path, const gchar *new_text) {
 }
 
 void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModifierType mods) {
-	Gdk::ModifierType accel_mods = (Gdk::ModifierType)mods;
+	uint32_t accel_mods = KeyCodes::convert_modifier(mods);
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
 	if (type == KEY) {

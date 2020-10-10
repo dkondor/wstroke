@@ -29,6 +29,7 @@
 #include "actiondb.h"
 #include "ecres.h"
 #include "convert_keycodes.h"
+#include "input_inhibitor.h"
 
 Glib::RefPtr<Gtk::Builder> widgets;
 
@@ -96,11 +97,14 @@ int main(int argc, char **argv)
 	Gtk::Window* win = nullptr;
 	widgets->get_widget("main", win);
 	
+	if(!input_inhibitor_init())
+		fprintf(stderr, _("Could not initialize keyboard grabber interface. Assigning key combinations might not work.\n"));
+	
 	app->run(*win, argc, argv);
 	try {
 		actions_db.write(config_dir);
 	} catch (std::exception &e) {
-		printf(_("Error: Couldn't save action database: %s.\n"), e.what());
+		fprintf(stderr, _("Error: Couldn't save action database: %s.\n"), e.what());
 		// good_state = false;
 		error_dialog(Glib::ustring::compose(_( "Couldn't save %1.  Your changes will be lost.  "
 				"Make sure that \"%2\" is a directory and that you have write access to it.  "

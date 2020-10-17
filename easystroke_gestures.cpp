@@ -60,6 +60,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         wf::wl_idle_call idle_generate;
         wayfire_view target_view;
         wayfire_view initial_active_view;
+        bool needs_refocus = false;
         
         bool active = false;
         bool is_gesture = false;
@@ -130,16 +131,21 @@ void Command::run() {
 		void visit(const SendKey* action) override {
 			uint32_t mod = action->get_mods();
 			uint32_t key = action->get_key();
-			if(key) idle_generate.run_once([this, mod, key] () {
-				uint32_t t = wf::get_current_time();
-				keyboard_modifiers(t, mod, WLR_KEY_PRESSED);
-				if(mod) input.keyboard_mods(mod, 0, 0);
-				input.keyboard_key(t, key - 8, WLR_KEY_PRESSED);
-				t++;
-				input.keyboard_key(t, key - 8, WLR_KEY_RELEASED);
-				keyboard_modifiers(t, mod, WLR_KEY_RELEASED);
-				if(mod) input.keyboard_mods(0, 0, 0);
-			});
+			bool needs_refocus_tmp = needs_refocus;
+			if(key) {
+				idle_generate.run_once([this, mod, key, needs_refocus_tmp] () {
+					uint32_t t = wf::get_current_time();
+					keyboard_modifiers(t, mod, WLR_KEY_PRESSED);
+					if(mod) input.keyboard_mods(mod, 0, 0);
+					input.keyboard_key(t, key - 8, WLR_KEY_PRESSED);
+					t++;
+					input.keyboard_key(t, key - 8, WLR_KEY_RELEASED);
+					keyboard_modifiers(t, mod, WLR_KEY_RELEASED);
+					if(mod) input.keyboard_mods(0, 0, 0);
+					if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+				});
+				needs_refocus = false;
+			}
 		}
 		void visit(const SendText* action) override {
 			LOGW("SendText action not implemented!");
@@ -241,13 +247,18 @@ void Command::run() {
 				auto matcher = actions.get_root(); // TODO: match based on active window!
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
+				needs_refocus = target_mouse;
 				if(action) {
 					LOGI("Matched stroke: ", rr->name);
-					
 					action->visit(this);
 				}
 				else LOGI("Unmatched stroke");
-				if(target_mouse) output->focus_view(initial_active_view, false);
+				if(needs_refocus) {
+					idle_generate.run_once([this]() {
+						output->focus_view(initial_active_view, false);
+					});
+					needs_refocus = false;
+				}
 				is_gesture = false;
             }
             else {

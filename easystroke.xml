@@ -14,5 +14,10 @@
 			<_long>Sets the line color for the strokes drawn.</_long>
 			<default>0.7 0.1 0.1 1.0</default>
 		</option>
+		<option name="target_view_mouse" type="bool">
+			<_short>Target the view under the mouse</_short>
+			<_long>If set, the target of the gesture action is the view under the pointer when the gesture is initiated. Otherwise, it is the currently active view.</_long>
+			<default>true</default>
+		</option>
 	</plugin>
 </wayfire>

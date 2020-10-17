@@ -52,12 +52,14 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
     protected:
         wf::button_callback stroke_initiate;
         wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
+        wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
         
         PreStroke ps;
         ActionDB actions;
         input_headless input;
         wf::wl_idle_call idle_generate;
-        wayfire_view active_view;
+        wayfire_view target_view;
+        wayfire_view initial_active_view;
         
         bool active = false;
         bool is_gesture = false;
@@ -153,25 +155,25 @@ void Command::run() {
 			LOGW("Button action not implemented!");
 		}
 		void visit(const Misc* action) override {
-			if(!active_view) return;
+			if(!target_view) return;
 			switch(action->get_action_type()) {
 				case Misc::Type::CLOSE:
-					active_view->close();
+					target_view->close();
 					break;
 				case Misc::Type::MINIMIZE:
-					active_view->minimize_request(true);
+					target_view->minimize_request(true);
 					break;
 				case Misc::Type::MAXIMIZE:
 					/* toggle maximized state */
-					if(active_view->tiled_edges == wf::TILED_EDGES_ALL)
-						active_view->tile_request(0);
-					else active_view->tile_request(wf::TILED_EDGES_ALL);
+					if(target_view->tiled_edges == wf::TILED_EDGES_ALL)
+						target_view->tile_request(0);
+					else target_view->tile_request(wf::TILED_EDGES_ALL);
 					break;
 				case Misc::Type::MOVE:
-					active_view->move_request();
+					target_view->move_request();
 					break;
 				case Misc::Type::RESIZE:
-					active_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+					target_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
 					break;
 				default:
 					break;
@@ -195,6 +197,12 @@ void Command::run() {
                 return false;
             }
             
+            initial_active_view = output->get_active_view();
+            if(target_mouse) {
+				target_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
+				if(target_view) output->focus_view(target_view, false);
+			}
+			else target_view = initial_active_view;
             active = true;
             uint32_t t = wf::get_current_time();
             ps.add(Triple{(float)x, (float)y, t});
@@ -235,11 +243,12 @@ void Command::run() {
 				RAction action = matcher->handle(stroke, rr);
 				if(action) {
 					LOGI("Matched stroke: ", rr->name);
-					active_view = output->get_active_view();
+					
 					action->visit(this);
 				}
 				else LOGI("Unmatched stroke");
-                is_gesture = false;
+				if(target_mouse) output->focus_view(initial_active_view, false);
+				is_gesture = false;
             }
             else {
                 /* Note: we cannot directly generate a click since using the
@@ -268,6 +277,7 @@ void Command::run() {
             output->deactivate_plugin(grab_interface);
             ps.clear();
             clear_lines();
+            if(target_mouse) output->focus_view(initial_active_view, false);
             active = false;
             is_gesture = false;
         }

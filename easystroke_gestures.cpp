@@ -204,8 +204,12 @@ void Command::run() {
             }
             
             initial_active_view = output->get_active_view();
+            if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
+				initial_active_view = nullptr;
             if(target_mouse) {
 				target_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
+				if(target_view && target_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
+					target_view = nullptr;
 				if(target_view) output->focus_view(target_view, false);
 			}
 			else target_view = initial_active_view;

@@ -153,12 +153,25 @@ void Command::run() {
 			LOGW("Button action not implemented!");
 		}
 		void visit(const Misc* action) override {
+			if(!active_view) return;
 			switch(action->get_action_type()) {
 				case Misc::Type::CLOSE:
-					if(active_view) active_view->close();
+					active_view->close();
 					break;
 				case Misc::Type::MINIMIZE:
-					if(active_view) active_view->minimize_request(true);
+					active_view->minimize_request(true);
+					break;
+				case Misc::Type::MAXIMIZE:
+					/* toggle maximized state */
+					if(active_view->tiled_edges == wf::TILED_EDGES_ALL)
+						active_view->tile_request(0);
+					else active_view->tile_request(wf::TILED_EDGES_ALL);
+					break;
+				case Misc::Type::MOVE:
+					active_view->move_request();
+					break;
+				case Misc::Type::RESIZE:
+					active_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
 					break;
 				default:
 					break;

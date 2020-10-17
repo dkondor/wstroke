@@ -1152,7 +1152,7 @@ ButtonInfo Button::get_button_info() const {
 	return bi;
 }
 
-const char *Misc::types[5] = { N_("None"), N_("Close"), N_("Minimize"), nullptr };
+const char *Misc::types[7] = { N_("None"), N_("Close"), N_("Minimize"), N_("Toggle maximized"), N_("Move"), N_("Resize"), nullptr };
 
 const char* Misc::get_misc_type_str(Type type) { return _(types[static_cast<int>(type)]); }
 

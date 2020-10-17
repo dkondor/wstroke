@@ -26,7 +26,7 @@ If correctly installed, it will show up as "Easystroke mouse gestures" plugin in
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing stokes (will log output with matches).
- - Closing and minimizing the active view (select "WM Actions" and the appropriate action).
+ - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Actions" and the appropriate action).
  - Generating keypresses ("Key" action).
  - Getting keybindings and mouse button bindings in the configuration for actions.
  - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
@@ -35,4 +35,6 @@ If correctly installed, it will show up as "Easystroke mouse gestures" plugin in
 
  - Any other action (ignore, button press, scroll, running commands, etc.)
  - Identifying applications / adding new applications.
+ - Targeting the view under the mouse instead of a current active one.
+ - Reloading the configuration if edited while Wayfire is running (has to reload the plugin to apply any changes).
 

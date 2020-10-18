@@ -480,7 +480,7 @@ public:
 	 * throws exception on failure */
 	void write(const std::string& config_dir);
 
-	const ActionListDiff *get_action_list(std::string wm_class) const {
+	const ActionListDiff *get_action_list(const std::string& wm_class) const {
 		std::map<std::string, ActionListDiff *>::const_iterator i = apps.find(wm_class);
 		return i == apps.end() ? &root : i->second;
 	}

@@ -541,8 +541,28 @@ bool Actions::select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel:
 	return false;
 }
 
+bool get_app_id_dialog(std::string& app_id) {
+	Gtk::Dialog dialog("Add new app", true);
+	auto x = dialog.get_content_area();
+	Gtk::Label label("Enter the app id of the application to add:");
+	Gtk::Entry app_id_entry;
+	x->pack_start(label, false, false, 10);
+	x->pack_start(app_id_entry, false, false, 10);
+	label.show();
+	app_id_entry.show();
+	dialog.add_button("OK", Gtk::RESPONSE_OK);
+	dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+	int r = dialog.run();
+	if(r == Gtk::RESPONSE_OK) {
+		app_id = app_id_entry.get_text();
+		return true;
+	}
+	return false;
+}
+
 void Actions::on_add_app() {
 	std::string name; // = grabber->select_window();
+	if (!get_app_id_dialog(name)) return;
 	if (actions.apps.count(name)) {
 		apps_model->foreach(sigc::bind(sigc::mem_fun(*this, &Actions::select_app), actions.apps[name]));
 		return;

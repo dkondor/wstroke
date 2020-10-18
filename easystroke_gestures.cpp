@@ -248,7 +248,15 @@ void Command::run() {
             if(is_gesture) {
                 RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
 				/* try to match the stroke, write out match */
-				auto matcher = actions.get_root(); // TODO: match based on active window!
+				const ActionListDiff* matcher = nullptr;
+				if(target_view) {
+					const std::string& app_id = target_view->get_app_id();
+					LOGI("Target app id: ", app_id);
+					matcher = actions.get_action_list(app_id);
+				}
+				else matcher = actions.get_root();
+				
+				actions.get_root(); // TODO: match based on active window!
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
 				needs_refocus = target_mouse;

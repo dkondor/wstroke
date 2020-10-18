@@ -21,6 +21,7 @@ sudo ninja -C build install
 
 If correctly installed, it will show up as "Easystroke mouse gestures" plugin in WCM and can be enabled from there. Also, the mouse button for gestures can be changed there. Gesture actions can be configured by running `wstroke-config`. Configuration files are stored under `~/.config/wstroke`, in a format slightly updated from the original Easystroke. `wstroke-config` will read and convert any configuration from under `~/.easystroke` if this directory is empty.
 
+An example configuration file is under [example/actions-wstroke](example/actions-wstroke). You can copy this file to `~/.config/wstroke` to get started as well. Note that the plugin will still need to be enabled in WCM to work.
 
 ### What works
 

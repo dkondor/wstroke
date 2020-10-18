@@ -119,14 +119,9 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         
         /* visitor interface for carrying out actions */
         void visit(const Command* action) override {
-			LOGW("Command action not implemented!");		
-/*
-void Command::run() {
-	gchar* argv[] = {(gchar*) "/bin/sh", (gchar*) "-c", NULL, NULL};
-	argv[2] = (gchar *) cmd.c_str();
-	g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
-}
-*/
+			const auto& cmd = action->get_cmd();
+			LOGI("Running command: ", cmd);
+			wf::get_core().run(cmd);
 		}
 		void visit(const SendKey* action) override {
 			uint32_t mod = action->get_mods();

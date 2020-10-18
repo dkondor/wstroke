@@ -161,10 +161,8 @@ void Command::run() {
 			LOGW("Button action not implemented!");
 		}
 		void visit(const Misc* action) override {
-			if(action->get_action_type() == Misc::Type::SHOWHIDE) {
-				LOGW("Starting settings program not implemented yet!");
-				return;
-			}
+			if(action->get_action_type() == Misc::Type::SHOWHIDE) 
+				wf::get_core().run("wstroke-config");
 			if(!target_view) return;
 			switch(action->get_action_type()) {
 				case Misc::Type::CLOSE:

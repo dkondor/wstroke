@@ -248,13 +248,13 @@ public:
 class Misc : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type { NONE, CLOSE, MINIMIZE, MAXIMIZE, MOVE, RESIZE };
+	enum class Type { NONE, CLOSE, SHOWHIDE, MAXIMIZE, MOVE, RESIZE, MINIMIZE };
 	Type type;
 private:
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Misc(Type t) : type(t) {}
 public:
-	static const char *types[7];
+	static const char *types[8];
 	static const char* get_misc_type_str(Type type);
 	Misc() {}
 	std::string get_type() const override { return "WM Action"; }

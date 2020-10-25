@@ -187,18 +187,10 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
         /* callback when the stroke mouse button is pressed */
         bool start_stroke(int32_t x, int32_t y) {
             if(active) {
-                LOGW("start_stroke() already active!");
+                LOGW("already active!");
                 return false;
             }
             
-            if(!output->activate_plugin(grab_interface,0)) {
-                LOGE("could not activate");
-                return false;
-            }
-            if(!grab_interface->grab()) {
-                LOGE("could not get grab");
-                return false;
-            }
             
             initial_active_view = output->get_active_view();
             if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
@@ -210,6 +202,24 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				if(target_view) output->focus_view(target_view, false);
 			}
 			else target_view = initial_active_view;
+			
+			if(target_view) {
+				const std::string& app_id = target_view->get_app_id();
+				if(actions.exclude_app(app_id)) {
+					LOGI("Excluding strokes for app: ", app_id);
+					return false;
+				}
+			}
+			
+            if(!output->activate_plugin(grab_interface,0)) {
+                LOGE("could not activate");
+                return false;
+            }
+            if(!grab_interface->grab()) {
+                LOGE("could not get grab");
+                return false;
+            }
+            
             active = true;
             uint32_t t = wf::get_current_time();
             ps.add(Triple{(float)x, (float)y, t});

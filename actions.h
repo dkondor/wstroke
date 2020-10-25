@@ -77,6 +77,10 @@ private:
 	void update_counts();
 	void on_reset_actions();
 	void on_remove_app();
+	
+	bool select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name);
+	void on_add_exclude();
+	void on_remove_exclude();
 
 	class ModelColumns : public Gtk::TreeModel::ColumnRecord {
 	public:
@@ -135,6 +139,11 @@ private:
 		Gtk::TreeModelColumn<int> count;
 	};
 	Apps ca;
+	
+	/* exception list */
+	Single exclude_cols;
+	Glib::RefPtr<Gtk::ListStore> exclude_tm;
+	Gtk::TreeView* exclude_tv;
 
 	struct Focus;
 

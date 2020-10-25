@@ -26,6 +26,7 @@
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/unordered_set.hpp>
 #include <boost/serialization/export.hpp>
 #include <boost/serialization/shared_ptr.hpp>
 
@@ -157,6 +158,9 @@ ActionDB::ActionDB() {
 template<class Archive> void ActionDB::load(Archive & ar, const unsigned int version) {
 	if (version >= 2) {
 		ar & root;
+		if (version >= 4) {
+			ar & exclude_apps;
+		}
 	}
 	if (version == 1) {
 		std::map<int, StrokeInfo> strokes;
@@ -180,6 +184,7 @@ template<class Archive> void ActionDB::load(Archive & ar, const unsigned int ver
 
 template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
 	ar & root;
+	ar & exclude_apps;
 }
 
 

@@ -19,6 +19,7 @@
 #include <map>
 #include <set>
 #include <list>
+#include <unordered_set>
 #include <glibmm.h>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/version.hpp>
@@ -465,6 +466,7 @@ public:
 	std::map<std::string, ActionListDiff *> apps;
 private:
 	ActionListDiff root;
+	std::unordered_set<std::string> exclude_apps;
 public:
 	typedef std::map<Unique *, StrokeInfo>::const_iterator const_iterator;
 	const const_iterator begin() const { return root.added.begin(); }
@@ -484,9 +486,15 @@ public:
 		std::map<std::string, ActionListDiff *>::const_iterator i = apps.find(wm_class);
 		return i == apps.end() ? &root : i->second;
 	}
+	
+	const std::unordered_set<std::string>& get_exclude_apps() const { return exclude_apps; }
+	bool exclude_app(const std::string& cl) const { return exclude_apps.count(cl); }
+	bool add_exclude_app(const std::string& cl) { return exclude_apps.insert(cl).second; }
+	bool remove_exclude_app(const std::string& cl) { return exclude_apps.erase(cl); }
+	
 	ActionDB();
 };
-BOOST_CLASS_VERSION(ActionDB, 3)
+BOOST_CLASS_VERSION(ActionDB, 4)
 
 
 

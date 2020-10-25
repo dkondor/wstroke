@@ -240,11 +240,85 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	apps_view->set_model(apps_model);
 	apps_view->enable_model_drag_dest();
 	apps_view->expand_all();
+	
+	/* list of exceptions */
+	Gtk::Button *add_exception, *remove_exception;
+	widgets->get_widget("button_add_exception", add_exception);
+	widgets->get_widget("button_remove_exception", remove_exception);
+	widgets->get_widget("treeview_exceptions", exclude_tv);
+	
+	exclude_tm = Gtk::ListStore::create(exclude_cols);
+	exclude_tv->set_model(exclude_tm);
+	exclude_tv->append_column(_("Application (WM__CLASS)"), exclude_cols.type);
+	exclude_tm->set_sort_column(exclude_cols.type, Gtk::SORT_ASCENDING);
+	
+	add_exception->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_exclude));
+	remove_exception->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_exclude));
+	
+	for (const std::string& cl : actions.get_exclude_apps()) {
+		Gtk::TreeModel::Row row = *(exclude_tm->append());
+		row[exclude_cols.type] = cl;
+	}
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {
 	return src == "" ? _("<unnamed>") : src;
 }
+
+static bool get_app_id_dialog(std::string& app_id) {
+	Gtk::Dialog dialog("Add new app", true);
+	auto x = dialog.get_content_area();
+	Gtk::Label label("Enter the app id of the application to add:");
+	Gtk::Entry app_id_entry;
+	x->pack_start(label, false, false, 10);
+	x->pack_start(app_id_entry, false, false, 10);
+	label.show();
+	app_id_entry.show();
+	dialog.add_button("OK", Gtk::RESPONSE_OK);
+	dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+	int r = dialog.run();
+	if(r == Gtk::RESPONSE_OK) {
+		app_id = app_id_entry.get_text();
+		return true;
+	}
+	return false;
+}
+
+bool Actions::select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name) {
+	if ((*iter)[exclude_cols.type] == name) {
+		exclude_tv->set_cursor(path);
+		return true;
+	}
+	return false;
+}
+
+void Actions::on_add_exclude() {
+	std::string name; // = grabber->select_window();
+	if (!get_app_id_dialog(name)) return;
+	if (actions.add_exclude_app(name)) {
+		Gtk::TreeModel::Row row = *(exclude_tm->append());
+		row[exclude_cols.type] = name;
+		Gtk::TreePath path = exclude_tm->get_path(row);
+		exclude_tv->set_cursor(path);
+	} else {
+		exclude_tm->foreach(sigc::bind(sigc::mem_fun(*this, &Actions::select_exclude_row), name));
+	}
+}
+
+void Actions::on_remove_exclude() {
+	Gtk::TreePath path;
+	Gtk::TreeViewColumn *col;
+	exclude_tv->get_cursor(path, col);
+	if (path.gobj() != 0) {
+		Gtk::TreeIter iter = *exclude_tm->get_iter(path);
+		Glib::ustring tmp = (*iter)[exclude_cols.type];
+		if (!actions.remove_exclude_app(tmp)) {
+			fprintf(stderr, "Erased app from exclude list (%s) not found!\n", tmp.c_str());
+		}
+		exclude_tm->erase(iter);
+	}
+}
+
 
 void Actions::load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions) {
 	Gtk::TreeRow row = *(apps_model->append(ch));
@@ -536,25 +610,6 @@ bool Actions::select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel:
 	if ((*iter)[ca.actions] == actions) {
 		apps_view->expand_to_path(path);
 		apps_view->set_cursor(path);
-		return true;
-	}
-	return false;
-}
-
-bool get_app_id_dialog(std::string& app_id) {
-	Gtk::Dialog dialog("Add new app", true);
-	auto x = dialog.get_content_area();
-	Gtk::Label label("Enter the app id of the application to add:");
-	Gtk::Entry app_id_entry;
-	x->pack_start(label, false, false, 10);
-	x->pack_start(app_id_entry, false, false, 10);
-	label.show();
-	app_id_entry.show();
-	dialog.add_button("OK", Gtk::RESPONSE_OK);
-	dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
-	int r = dialog.run();
-	if(r == Gtk::RESPONSE_OK) {
-		app_id = app_id_entry.get_text();
 		return true;
 	}
 	return false;

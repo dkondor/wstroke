@@ -29,13 +29,15 @@ An example configuration file is under [example/actions-wstroke](example/actions
  - Drawing and recognizing stokes (will log output with matches).
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Actions" and the appropriate action).
  - Generating keypresses ("Key" action).
+ - Running commands as a gesture action.
  - Getting keybindings and mouse button bindings in the configuration for actions.
  - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
+ - Identifying views and using application specific gestures or excluding certain apps completely.
+ - Option to target either the view under the mouse when starting the gesture (original Easystroke behavior) or the currently active one.
+ - Interactively identifying running applications in `wstroke-config` (e.g. to add application specific gestures or exclude them).
  
 ### What does not work
 
- - Any other action (ignore, button press, scroll, running commands, etc.)
- - Identifying applications / adding new applications.
- - Targeting the view under the mouse instead of a current active one.
+ - Any other action (ignore, button press, scroll, etc.)
  - Reloading the configuration if edited while Wayfire is running (has to reload the plugin to apply any changes).
 

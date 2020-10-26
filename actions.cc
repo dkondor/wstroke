@@ -17,8 +17,10 @@
 #include "actiondb.h"
 #include "stroke_draw.h"
 #include "convert_keycodes.h"
+#include "toplevel-grabber.h"
 #include <glibmm/i18n.h>
 #include <gdkmm.h>
+#include <gdk/gdkwayland.h>
 
 #include <X11/XKBlib.h>
 //~ #include "grabber.h"
@@ -265,10 +267,10 @@ static Glib::ustring app_name_hr(Glib::ustring src) {
 	return src == "" ? _("<unnamed>") : src;
 }
 
-static bool get_app_id_dialog(std::string& app_id) {
+static bool get_app_id_dialog_fallback(std::string& app_id) {
 	Gtk::Dialog dialog("Add new app", true);
 	auto x = dialog.get_content_area();
-	Gtk::Label label("Enter the app id of the application to add:");
+	Gtk::Label label("Please enter the app ID of the application to add:");
 	Gtk::Entry app_id_entry;
 	x->pack_start(label, false, false, 10);
 	x->pack_start(app_id_entry, false, false, 10);
@@ -282,6 +284,69 @@ static bool get_app_id_dialog(std::string& app_id) {
 		return true;
 	}
 	return false;
+}
+
+struct app_id_dialog_data {
+	std::string& app_id;
+	Gtk::Dialog* dialog;
+	app_id_dialog_data(std::string& app_id_, Gtk::Dialog* dialog_):
+		app_id(app_id_), dialog(dialog_) { }
+};
+
+static void app_id_cb(void* p, tl_grabber* gr) {
+	auto data = (app_id_dialog_data*)p;
+	char* app_id = toplevel_grabber_get_app_id(gr);
+	toplevel_grabber_set_callback(gr, nullptr, nullptr);
+	if(!app_id) {
+		fprintf(stderr, "Cannot get app ID of selected toplevel view!\n");
+		data->dialog->response(Gtk::RESPONSE_NONE);
+	}
+	data->app_id = std::string(app_id);
+	free(app_id);
+	data->dialog->response(Gtk::RESPONSE_OK);	
+}
+
+static bool get_app_id_dialog(std::string& app_id) {
+	auto gdk_display = Gdk::Display::get_default();
+	struct tl_grabber* gr = nullptr;
+	struct wl_display* dpy = nullptr;
+#ifdef GDK_WINDOWING_WAYLAND
+	{
+		auto tmp = gdk_display->gobj();
+		if(GDK_IS_WAYLAND_DISPLAY(tmp)) {
+			dpy = gdk_wayland_display_get_wl_display(gdk_display->gobj());
+			gr = toplevel_grabber_new(dpy, nullptr, nullptr);
+		}
+	}
+#endif
+	if(!gr) {
+		fprintf(stderr, "Cannot initiate foreign toplevel grabber interface, falling back to manual entry of app ID\n");
+		return get_app_id_dialog_fallback(app_id);
+	}
+	
+	Gtk::Dialog dialog("Add new app", true);
+	auto x = dialog.get_content_area();
+	Gtk::Label label("Please select the app to add by clicking on it or click Cancel to enter the app ID manually");
+	x->pack_start(label, false, false, 10);
+	label.show();
+	dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+	app_id_dialog_data data(app_id, &dialog);
+	toplevel_grabber_set_callback(gr, app_id_cb, &data);
+	int r = dialog.run();
+	dialog.hide();
+	wl_display_roundtrip(dpy);
+	auto seat = gdk_display->get_default_seat();
+	struct wl_seat* wl_seat = gdk_wayland_seat_get_wl_seat(seat->gobj());
+	toplevel_grabber_activate_app(gr, "wstroke-config", wl_seat, 1);
+	toplevel_grabber_free(gr);
+	switch(r) {
+		case Gtk::RESPONSE_OK:
+			return true;
+		case Gtk::RESPONSE_CANCEL:
+			return get_app_id_dialog_fallback(app_id);
+		default:
+			return false;
+	}
 }
 
 bool Actions::select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name) {

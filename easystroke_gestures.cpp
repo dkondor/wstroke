@@ -214,7 +214,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				target_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
 				if(target_view && target_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 					target_view = nullptr;
-				if(target_view) output->focus_view(target_view, false);
+				if(target_view && target_view != initial_active_view) output->focus_view(target_view, false);
 			}
 			else target_view = initial_active_view;
 			
@@ -281,7 +281,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				actions.get_root(); // TODO: match based on active window!
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
-				needs_refocus = target_mouse;
+				needs_refocus = target_mouse && (target_view != initial_active_view);
 				if(action) {
 					LOGI("Matched stroke: ", rr->name);
 					action->visit(this);

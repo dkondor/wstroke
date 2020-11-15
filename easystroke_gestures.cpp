@@ -47,8 +47,8 @@ varying highp vec2 uvpos;
 uniform mat4 MVP;
 
 void main() {
-    gl_Position = MVP * vec4(position.xy, 0.0, 1.0);
-    uvpos = uvPosition;
+	gl_Position = MVP * vec4(position.xy, 0.0, 1.0);
+	uvpos = uvPosition;
 })";
 
 static const char *color_rect_fragment_source =
@@ -58,36 +58,36 @@ uniform mediump vec4 color;
 
 void main()
 {
-    gl_FragColor = color;
+	gl_FragColor = color;
 })";
 
 
 
 class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
-    protected:
-        wf::button_callback stroke_initiate;
-        wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
-        wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
-        
-        PreStroke ps;
-        ActionDB actions;
-        input_headless input;
-        wf::wl_idle_call idle_generate;
-        wayfire_view target_view;
-        wayfire_view initial_active_view;
-        bool needs_refocus = false;
-        
-        bool active = false;
-        bool is_gesture = false;
+	protected:
+		wf::button_callback stroke_initiate;
+		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
+		wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
 		
-    public:
-        wayfire_easystroke() {
-            stroke_initiate = [=](uint32_t button, int32_t x, int32_t y) {
-                return start_stroke(x, y);
-            };
-        }
-        
-        void init() override {
+		PreStroke ps;
+		ActionDB actions;
+		input_headless input;
+		wf::wl_idle_call idle_generate;
+		wayfire_view target_view;
+		wayfire_view initial_active_view;
+		bool needs_refocus = false;
+		
+		bool active = false;
+		bool is_gesture = false;
+		
+	public:
+		wayfire_easystroke() {
+			stroke_initiate = [=](uint32_t button, int32_t x, int32_t y) {
+				return start_stroke(x, y);
+			};
+		}
+		
+		void init() override {
 			std::string config_dir = getenv("HOME");
 			config_dir += "/.config/wstroke/";
 			bool config_read = false;
@@ -113,27 +113,27 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				default_vertex_shader_source, color_rect_fragment_source));
 			OpenGL::render_end();
 			
-            grab_interface->name = "easystroke";
-            grab_interface->capabilities = wf::CAPABILITY_GRAB_INPUT;
-            grab_interface->callbacks.pointer.motion = [=](int32_t x, int32_t y) {
-                handle_input_move(x, y);
-            };
-            grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
-                wf::buttonbinding_t tmp = initiate;
-                if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) end_stroke();
-            };
-            output->add_button(initiate, &stroke_initiate);
-        }
-        
-        void fini() override {
-            if(active) cancel_stroke();
-            output->rem_binding(&stroke_initiate);
-            input.fini();
-            color_program.free_resources();
-        }
-        
-        /* visitor interface for carrying out actions */
-        void visit(const Command* action) override {
+			grab_interface->name = "easystroke";
+			grab_interface->capabilities = wf::CAPABILITY_GRAB_INPUT;
+			grab_interface->callbacks.pointer.motion = [=](int32_t x, int32_t y) {
+				handle_input_move(x, y);
+			};
+			grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
+				wf::buttonbinding_t tmp = initiate;
+				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) end_stroke();
+			};
+			output->add_button(initiate, &stroke_initiate);
+		}
+		
+		void fini() override {
+			if(active) cancel_stroke();
+			output->rem_binding(&stroke_initiate);
+			input.fini();
+			color_program.free_resources();
+		}
+		
+		/* visitor interface for carrying out actions */
+		void visit(const Command* action) override {
 			const auto& cmd = action->get_cmd();
 			LOGI("Running command: ", cmd);
 			wf::get_core().run(cmd);
@@ -197,20 +197,20 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 					break;
 			}
 		}
-    
-    protected:
-        /* callback when the stroke mouse button is pressed */
-        bool start_stroke(int32_t x, int32_t y) {
-            if(active) {
-                LOGW("already active!");
-                return false;
-            }
-            
-            
-            initial_active_view = output->get_active_view();
-            if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
+	
+	protected:
+		/* callback when the stroke mouse button is pressed */
+		bool start_stroke(int32_t x, int32_t y) {
+			if(active) {
+				LOGW("already active!");
+				return false;
+			}
+			
+			
+			initial_active_view = output->get_active_view();
+			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 				initial_active_view = nullptr;
-            if(target_mouse) {
+			if(target_mouse) {
 				target_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
 				if(target_view && target_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 					target_view = nullptr;
@@ -226,49 +226,49 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				}
 			}
 			
-            if(!output->activate_plugin(grab_interface,0)) {
-                LOGE("could not activate");
-                return false;
-            }
-            if(!grab_interface->grab()) {
-                LOGE("could not get grab");
-                return false;
-            }
-            
-            active = true;
-            uint32_t t = wf::get_current_time();
-            ps.add(Triple{(float)x, (float)y, t});
-            return true;
-        }
-        
-        /* callback when the mouse is moved */
-        void handle_input_move(int32_t x, int32_t y) {
-            Triple t{(float)x, (float)y, wf::get_current_time()};
-            if(!is_gesture) {
-                float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
-                if(dist > 16.0f) {
-                    is_gesture = true;
-                    start_drawing();
-                }
-            }
-            ps.add(t);
-            draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
-                ps.back().x, ps.back().y);
-        }
-        
-        /* start drawing the stroke on the screen with the annotate plugin */
-        void start_drawing() {
-            for(size_t i = 1; i < ps.size(); i++)
-                draw_line(ps[i-1].x, ps[i-1].y, ps[i].x, ps[i].y);
-        }
-        
-        /* callback when the mouse button is released */
-        void end_stroke() {
-            clear_lines();
+			if(!output->activate_plugin(grab_interface,0)) {
+				LOGE("could not activate");
+				return false;
+			}
+			if(!grab_interface->grab()) {
+				LOGE("could not get grab");
+				return false;
+			}
+			
+			active = true;
+			uint32_t t = wf::get_current_time();
+			ps.add(Triple{(float)x, (float)y, t});
+			return true;
+		}
+		
+		/* callback when the mouse is moved */
+		void handle_input_move(int32_t x, int32_t y) {
+			Triple t{(float)x, (float)y, wf::get_current_time()};
+			if(!is_gesture) {
+				float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
+				if(dist > 16.0f) {
+					is_gesture = true;
+					start_drawing();
+				}
+			}
+			ps.add(t);
+			draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
+				ps.back().x, ps.back().y);
+		}
+		
+		/* start drawing the stroke on the screen with the annotate plugin */
+		void start_drawing() {
+			for(size_t i = 1; i < ps.size(); i++)
+				draw_line(ps[i-1].x, ps[i-1].y, ps[i].x, ps[i].y);
+		}
+		
+		/* callback when the mouse button is released */
+		void end_stroke() {
+			clear_lines();
 			grab_interface->ungrab();
 			output->deactivate_plugin(grab_interface);
-            if(is_gesture) {
-                RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
+			if(is_gesture) {
+				RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
 				/* try to match the stroke, write out match */
 				const ActionListDiff* matcher = nullptr;
 				if(target_view) {
@@ -294,16 +294,16 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 					needs_refocus = false;
 				}
 				is_gesture = false;
-            }
-            else {
-                /* Note: we cannot directly generate a click since using the
-                 * grab interface "unfocuses" any view under the cursor for
-                 * the purpose of receiving these events. The
-                 * grab_interface->ungrab() call does not instantly reset
-                 * this to avoid propagating this event, but adds the
-                 * necessary "refocus" to the idle loop. With this call,
-                 * we are adding the emulated click to the idle loop as well. */
-                idle_generate.run_once([this]() {
+			}
+			else {
+				/* Note: we cannot directly generate a click since using the
+				 * grab interface "unfocuses" any view under the cursor for
+				 * the purpose of receiving these events. The
+				 * grab_interface->ungrab() call does not instantly reset
+				 * this to avoid propagating this event, but adds the
+				 * necessary "refocus" to the idle loop. With this call,
+				 * we are adding the emulated click to the idle loop as well. */
+				idle_generate.run_once([this]() {
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);
@@ -311,89 +311,89 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
 					output->add_button(initiate, &stroke_initiate);
 				});
-            }
-            ps.clear();
-            active = false;
-        }
-        
-        /* callback to cancel a stroke */
-        void cancel_stroke() {
-            grab_interface->ungrab();
-            output->deactivate_plugin(grab_interface);
-            ps.clear();
-            clear_lines();
-            if(target_mouse) output->focus_view(initial_active_view, false);
-            active = false;
-            is_gesture = false;
-        }
-        
-        static constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> mod_map = {
+			}
+			ps.clear();
+			active = false;
+		}
+		
+		/* callback to cancel a stroke */
+		void cancel_stroke() {
+			grab_interface->ungrab();
+			output->deactivate_plugin(grab_interface);
+			ps.clear();
+			clear_lines();
+			if(target_mouse) output->focus_view(initial_active_view, false);
+			active = false;
+			is_gesture = false;
+		}
+		
+		static constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> mod_map = {
 	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_SHIFT, KEY_LEFTSHIFT),
 	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_CTRL, KEY_LEFTCTRL),
 	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_ALT, KEY_LEFTALT),
 	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_LOGO, KEY_LEFTMETA)
 };
-        
-        void keyboard_modifiers(uint32_t t, uint32_t mod, enum wlr_key_state state) {
+		
+		void keyboard_modifiers(uint32_t t, uint32_t mod, enum wlr_key_state state) {
 			for(const auto& x : mod_map) 
 				if(x.first & mod) input.keyboard_key(t, x.second, state);
 		}
-    
-    /*****************************************************************
-     * Annotate-like functionality to draw the strokes on the screen *
-     * This could be replaced by a dependence on an external plugin  *
-     *****************************************************************/
-    
-        /* draw lines on the screen, a simplified version of annotate */
-        /* current annotation to be rendered -- store it in a framebuffer */
-        wf::framebuffer_t fb;
-        /* render function */
-        wf::post_hook_t render_hook = [=] (const wf::framebuffer_base_t& source,
+	
+	/*****************************************************************
+	 * Annotate-like functionality to draw the strokes on the screen *
+	 * This could be replaced by a dependence on an external plugin  *
+	 *****************************************************************/
+	
+		/* draw lines on the screen, a simplified version of annotate */
+		/* current annotation to be rendered -- store it in a framebuffer */
+		wf::framebuffer_t fb;
+		/* render function */
+		wf::post_hook_t render_hook = [=] (const wf::framebuffer_base_t& source,
 			const wf::framebuffer_base_t& destination) { render(source, destination); };
-        /* flag to indicate if render_hook is active */
-        bool render_active = false;
-        wf::option_wrapper_t<wf::color_t> stroke_color{"easystroke/stroke_color"};
-        OpenGL::program_t color_program;
-        
-        
-        /* allocate frambuffer for storing the drawings if it
-         * has not been allocated yet
-         * TODO: track changes in screen size! */
-        bool ensure_fb() {
-            bool ret = true;
-            if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
-                auto dim = output->get_screen_size();
-                OpenGL::render_begin();
-                ret = fb.allocate(dim.width, dim.height);
-                if(ret) {
-                    fb.bind(); // bind buffer to clear it
-                    OpenGL::clear({0, 0, 0, 0});
-                }
-                OpenGL::render_end();
-            }
-            return ret;
-        }
-        
-        static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
-            damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
-            damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
-            damageRect.width += std::ceil(stroke_width + 1);
-            damageRect.height += std::ceil(stroke_width + 1);
-        }
+		/* flag to indicate if render_hook is active */
+		bool render_active = false;
+		wf::option_wrapper_t<wf::color_t> stroke_color{"easystroke/stroke_color"};
+		OpenGL::program_t color_program;
+		
+		
+		/* allocate frambuffer for storing the drawings if it
+		 * has not been allocated yet
+		 * TODO: track changes in screen size! */
+		bool ensure_fb() {
+			bool ret = true;
+			if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
+				auto dim = output->get_screen_size();
+				OpenGL::render_begin();
+				ret = fb.allocate(dim.width, dim.height);
+				if(ret) {
+					fb.bind(); // bind buffer to clear it
+					OpenGL::clear({0, 0, 0, 0});
+				}
+				OpenGL::render_end();
+			}
+			return ret;
+		}
+		
+		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
+			damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
+			damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
+			damageRect.width += std::ceil(stroke_width + 1);
+			damageRect.height += std::ceil(stroke_width + 1);
+		}
 
-        
-        void draw_line(int x1, int y1, int x2, int y2) {
-            if(!ensure_fb()) return;
-    
+		
+		void draw_line(int x1, int y1, int x2, int y2) {
+			if(!ensure_fb()) return;
+	
 			wf::dimensions_t dim = output->get_screen_size();
 			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
 			
 			float stroke_width = 2.0;
 			OpenGL::render_begin(fb);
 			GL_CALL(glLineWidth(stroke_width));
-            /* GL_CALL(glEnable(GL_LINE_SMOOTH)); -- TODO: antialiasing! */
-            GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
-            render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
+			/* GL_CALL(glEnable(GL_LINE_SMOOTH)); -- TODO: antialiasing! */
+			GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
+			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
 			OpenGL::render_end();
 			
 			if(!render_active) output->render->add_post(&render_hook);
@@ -401,9 +401,9 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
 			pad_damage_rect(d, stroke_width);
 			output->render->damage(d);
-        }
-        
-        void clear_lines() {
+		}
+		
+		void clear_lines() {
 			if(render_active) {
 				output->render->rem_post(&render_hook);
 				fb.release();
@@ -411,9 +411,9 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				render_active = false;
 			}
 		}
-        
-        
-        void render(const wf::framebuffer_base_t& source, const wf::framebuffer_base_t& destination) {
+		
+		
+		void render(const wf::framebuffer_base_t& source, const wf::framebuffer_base_t& destination) {
 			wf::dimensions_t dim = output->get_screen_size();
 			
 			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);

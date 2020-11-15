@@ -22,6 +22,7 @@
 #include <wayfire/opengl.hpp>
 #include <wayfire/view.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <sys/inotify.h>
 
 #include <linux/input-event-codes.h>
 extern "C"
@@ -70,11 +71,16 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
 		
 		PreStroke ps;
-		ActionDB actions;
+		ActionDB* actions = nullptr;
 		input_headless input;
 		wf::wl_idle_call idle_generate;
 		wayfire_view target_view;
 		wayfire_view initial_active_view;
+		int inotify_fd = -1;
+		struct wl_event_source* inotify_source = nullptr;
+		static constexpr size_t inotify_buffer_size = 10*(sizeof(struct inotify_event) + NAME_MAX + 1);
+		char inotify_buffer[inotify_buffer_size];
+		
 		bool needs_refocus = false;
 		
 		bool active = false;
@@ -86,20 +92,13 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				return start_stroke(x, y);
 			};
 		}
+		~wayfire_easystroke() { fini(); }
 		
 		void init() override {
-			std::string config_dir = getenv("HOME");
-			config_dir += "/.config/wstroke/";
-			bool config_read = false;
-			try {
-				config_read = actions.read(config_dir);
-			}
-			catch(std::exception& e) {
-				LOGE(e.what());
-			}
-			if(!config_read) {
-				LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
-			}
+			inotify_fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+			reload_config();
+			inotify_source = wl_event_loop_add_fd(wf::get_core().ev_loop, inotify_fd, WL_EVENT_READABLE,
+				config_updated, this);
 			
 			/* start the headless backend, but not instantly since it
 			 * might be started automatically by the core multi_backend */
@@ -130,6 +129,18 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			output->rem_binding(&stroke_initiate);
 			input.fini();
 			color_program.free_resources();
+			if(actions) {
+				delete actions;
+				actions = nullptr;
+			}
+			if(inotify_source) {
+				wl_event_source_remove(inotify_source);
+				inotify_source = nullptr;
+			}
+			if(inotify_fd >= 0) {
+				close(inotify_fd);
+				inotify_fd = -1;
+			}
 		}
 		
 		/* visitor interface for carrying out actions */
@@ -199,8 +210,50 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		}
 	
 	protected:
+		
+		/* load / reload the configuration; also set up a watch for changes */
+		void reload_config() {
+			std::string config_dir = getenv("HOME");
+			config_dir += "/.config/wstroke/";
+			ActionDB* actions_tmp = new ActionDB();
+			if(actions_tmp) {
+				bool config_read = false;
+				try {
+					config_read = actions_tmp->read(config_dir);
+				}
+				catch(std::exception& e) {
+					LOGE(e.what());
+				}
+				if(!config_read) {
+					LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
+					delete actions_tmp;
+				}
+				else {
+					if(actions) delete actions;
+					actions = actions_tmp;
+				}
+			}
+			if(inotify_fd >= 0) {
+				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
+				std::string config_file = config_dir + "inotify_buffer_size";
+				inotify_add_watch(inotify_fd, config_file.c_str(), IN_MODIFY);
+			}
+		}
+		
+		void handle_config_updated() {
+			while(read(inotify_fd, inotify_buffer, inotify_buffer_size) > 0) { }
+			reload_config();
+		}
+		
+		static int config_updated(int fd, uint32_t mask, void* ptr) {
+			wayfire_easystroke* w = (wayfire_easystroke*)ptr;
+			w->handle_config_updated();
+			return 0;
+		}
+		
 		/* callback when the stroke mouse button is pressed */
 		bool start_stroke(int32_t x, int32_t y) {
+			if(!actions) return false;
 			if(active) {
 				LOGW("already active!");
 				return false;
@@ -220,7 +273,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			
 			if(target_view) {
 				const std::string& app_id = target_view->get_app_id();
-				if(actions.exclude_app(app_id)) {
+				if(actions->exclude_app(app_id)) {
 					LOGI("Excluding strokes for app: ", app_id);
 					return false;
 				}
@@ -274,11 +327,10 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				if(target_view) {
 					const std::string& app_id = target_view->get_app_id();
 					LOGI("Target app id: ", app_id);
-					matcher = actions.get_action_list(app_id);
+					matcher = actions->get_action_list(app_id);
 				}
-				else matcher = actions.get_root();
+				else matcher = actions->get_root();
 				
-				actions.get_root(); // TODO: match based on active window!
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
 				needs_refocus = target_mouse && (target_view != initial_active_view);

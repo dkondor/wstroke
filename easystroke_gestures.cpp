@@ -88,8 +88,9 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		
 	public:
 		wayfire_easystroke() {
-			stroke_initiate = [=](uint32_t button, int32_t x, int32_t y) {
-				return start_stroke(x, y);
+			stroke_initiate = [=](const wf::buttonbinding_t& btn) {
+				auto p = output->get_cursor_position();
+				return start_stroke(p.x, p.y);
 			};
 		}
 		~wayfire_easystroke() { fini(); }
@@ -181,6 +182,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		void visit(const Button* action) override {
 			LOGW("Button action not implemented!");
 		}
+		/* TODO: remove this, use new actions */
 		void visit(const Misc* action) override {
 			if(action->get_action_type() == Misc::Type::SHOWHIDE) 
 				wf::get_core().run("wstroke-config");
@@ -207,6 +209,56 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				default:
 					break;
 			}
+		}
+		void visit(const Global* action) override {
+			std::string plugin_activator;
+			switch(action->get_action_type()) {
+				case Global::Type::EXPO:
+					plugin_activator = "expo/toggle";
+					break;
+				case Global::Type::SCALE:
+					plugin_activator = "scale/toggle";
+					break;
+				case Global::Type::SCALE_ALL:
+					plugin_activator = "scale/toggle_all";
+					break;
+				case Global::Type::SHOW_CONFIG:
+					wf::get_core().run("wstroke-config");
+					/* fallthrough */
+				default:
+					return;
+			}
+			call_plugin(plugin_activator);
+		}
+		void visit(const View* action) override {
+			switch(action->get_action_type()) {
+				case View::Type::CLOSE:
+					target_view->close();
+					break;
+				case View::Type::MINIMIZE:
+					target_view->minimize_request(true);
+					break;
+				case View::Type::MAXIMIZE:
+					/* toggle maximized state */
+					if(target_view->tiled_edges == wf::TILED_EDGES_ALL)
+						target_view->tile_request(0);
+					else target_view->tile_request(wf::TILED_EDGES_ALL);
+					break;
+				case View::Type::MOVE:
+					target_view->move_request();
+					break;
+				case View::Type::RESIZE:
+					target_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+					break;
+				case View::Type::FULLSCREEN:
+					call_plugin("wm-actions/toggle_fullscreen");
+					break;
+				default:
+					break;
+			}
+		}
+		void visit(const Plugin* action) override {
+			call_plugin(action->get_action());
 		}
 	
 	protected:
@@ -249,6 +301,20 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			wayfire_easystroke* w = (wayfire_easystroke*)ptr;
 			w->handle_config_updated();
 			return 0;
+		}
+		
+		/* call a plugin activator -- do this from the idle_call, so 
+		 * that our grab interface does not get in the way; also take
+		 * care of refocusing the original view if needed */
+		void call_plugin(const std::string& plugin_activator) {
+			bool needs_refocus_tmp = needs_refocus;
+			idle_generate.run_once([this, needs_refocus_tmp, plugin_activator] () {
+				wf::activator_data_t data;
+				data.source = wf::activator_source_t::PLUGIN;
+				output->call_plugin(plugin_activator, data);
+				if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+			});
+			needs_refocus = false;
 		}
 		
 		/* callback when the stroke mouse button is pressed */

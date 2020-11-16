@@ -3,7 +3,7 @@
 public class CellRendererTextish : Gtk.CellRendererText {
 	public enum Mode { Text, Key, Popup, Combo }
         public new Mode mode;
-	public string[] items;
+	public unowned string[] items;
 
 	public signal void key_edited(string path, Gdk.ModifierType mods, uint code);
 	public signal void combo_edited(string path, uint row);
@@ -20,6 +20,10 @@ public class CellRendererTextish : Gtk.CellRendererText {
 		mode = Mode.Text;
 		cell = null;
 		this.items = items;
+	}
+	
+	public void set_items(string[] items_) {
+		items = items_;
 	}
 
 	public override unowned Gtk.CellEditable? start_editing (Gdk.Event? event, Gtk.Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gtk.CellRendererState flags) {

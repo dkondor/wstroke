@@ -37,6 +37,9 @@ class Scroll;
 class Ignore;
 class Button;
 class Misc;
+class Global;
+class View;
+class Plugin;
 class Ranking;
 
 typedef boost::shared_ptr<Action> RAction;
@@ -47,6 +50,9 @@ typedef boost::shared_ptr<Scroll> RScroll;
 typedef boost::shared_ptr<Ignore> RIgnore;
 typedef boost::shared_ptr<Button> RButton;
 typedef boost::shared_ptr<Misc> RMisc;
+typedef boost::shared_ptr<Global> RGlobal;
+typedef boost::shared_ptr<View> RView;
+typedef boost::shared_ptr<Plugin> RPlugin;
 typedef boost::shared_ptr<Ranking> RRanking;
 
 class Unique;
@@ -60,7 +66,10 @@ class ActionVisitor {
 		virtual void visit(const Scroll* action) = 0;
 		virtual void visit(const Ignore* action) = 0;
 		virtual void visit(const Button* action) = 0;
-		virtual void visit(const Misc* action) = 0;
+		virtual void visit(const Misc* action) = 0; /* TODO: remove this */
+		virtual void visit(const Global* action) = 0;
+		virtual void visit(const View* action) = 0;
+		virtual void visit(const Plugin* action) = 0;
 };
 
 class ButtonInfo {
@@ -130,8 +139,6 @@ class Action {
 	friend std::ostream& operator<<(std::ostream& output, const Action& c);
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 public:
-/*	virtual void run() {}
-	virtual RModifiers prepare() { return RModifiers(); } */
 	virtual void visit(ActionVisitor* visitor) const = 0;
 	virtual std::string get_type() const = 0;
 	virtual ~Action() {}
@@ -145,7 +152,6 @@ public:
 	std::string cmd;
 	Command() {}
 	static RCommand create(const std::string &c) { return RCommand(new Command(c)); }
-	//~ virtual void run();
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::string get_type() const override { return "Command"; }
 	const std::string& get_cmd() const { return cmd; }
@@ -256,13 +262,71 @@ private:
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Misc(Type t) : type(t) {}
 public:
-	static const char *types[8];
+	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::MINIMIZE) + 1;
+	static const char *types[n_actions];
 	static const char* get_misc_type_str(Type type);
 	Misc() {}
 	std::string get_type() const override { return "WM Action"; }
 	static RMisc create(Type t) { return RMisc(new Misc(t)); }
 	Type get_action_type() const { return type; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	/* convert old Misc actions to new representation */
+	RAction convert() const;
+};
+
+/* new version: instead of Misc, we have Global Actions, View Actions, and Custom Plugin */
+class Global : public Action {
+	friend class boost::serialization::access;
+public:
+	enum class Type { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG }; /* TODO: add more, e.g. rotate cube? */
+protected:
+	Type type;
+	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	Global(Type t): type(t) { }
+	Global(): type(Type::NONE) { }
+public:
+	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::SHOW_CONFIG) + 1;
+	static const char* types[n_actions];
+	static const char* get_type_str(Type type);
+	std::string get_type() const override { return "Global Action"; }
+	static RGlobal create(Type t) { return RGlobal(new Global(t)); }
+	Type get_action_type() const { return type; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+};
+
+/* actions performed on the active view (either directly or via another plugin) */
+class View : public Action {
+	friend class boost::serialization::access;
+public:
+	enum class Type { NONE, CLOSE, MAXIMIZE, MOVE, RESIZE, MINIMIZE, FULLSCREEN }; /* TODO: add more, e.g. always on top */
+protected:
+	Type type;
+	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	View(Type t): type(t) { }
+	View(): type(Type::NONE) { }
+public:
+	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::FULLSCREEN) + 1;
+	static const char* types[n_actions];
+	static const char* get_type_str(Type type);
+	std::string get_type() const override { return "View Action"; }
+	static RView create(Type t) { return RView(new View(t)); }
+	Type get_action_type() const { return type; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+};
+
+/* custom plugin activator */
+class Plugin : public Action {
+	friend class boost::serialization::access;
+protected:
+	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	std::string cmd;
+	Plugin() {}
+	Plugin(const std::string &c) : cmd(c) {}
+public:
+	static RPlugin create(const std::string &c) { return RPlugin(new Plugin(c)); }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::string get_type() const override { return "Custom Plugin Action"; }
+	const std::string& get_action() const { return cmd; }
 };
 
 class StrokeSet : public std::set<RStroke> {
@@ -281,7 +345,7 @@ public:
 	std::string name;
 };
 typedef boost::shared_ptr<StrokeInfo> RStrokeInfo;
-BOOST_CLASS_VERSION(StrokeInfo, 1)
+BOOST_CLASS_VERSION(StrokeInfo, 2)
 
 class Ranking {
 	static bool show(RRanking r);

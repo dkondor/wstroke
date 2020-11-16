@@ -63,7 +63,7 @@ TreeViewMulti::TreeViewMulti() : Gtk::TreeView(), pending(false) {
        });
 }
 
-enum Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, MISC };
+enum class Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, MISC, GLOBAL, VIEW, PLUGIN };
 
 struct TypeInfo {
 	Type type;
@@ -72,25 +72,34 @@ struct TypeInfo {
 	const CellRendererTextishMode mode;
 };
 
-TypeInfo all_types[8] = {
-	{ COMMAND, N_("Command"),    &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Text  },
-	{ KEY,     N_("Key"),        &typeid(SendKey),  CELL_RENDERER_TEXTISH_MODE_Key   },
-	{ TEXT,    N_("Text"),       &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
-	{ SCROLL,  N_("Scroll"),     &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
-	{ IGNORE,  N_("Ignore"),     &typeid(Ignore),   CELL_RENDERER_TEXTISH_MODE_Key   },
-	{ BUTTON,  N_("Button"),     &typeid(Button),   CELL_RENDERER_TEXTISH_MODE_Popup },
-	{ MISC,    N_("WM Action"),  &typeid(Misc),     CELL_RENDERER_TEXTISH_MODE_Combo },
-	{ COMMAND, 0,                0,                 CELL_RENDERER_TEXTISH_MODE_Text  }
+const TypeInfo all_types[] = {
+	{ Type::COMMAND, N_("Command"),         &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Text  },
+	{ Type::KEY,     N_("Key"),             &typeid(SendKey),  CELL_RENDERER_TEXTISH_MODE_Key   },
+	{ Type::TEXT,    N_("Text"),            &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
+	{ Type::SCROLL,  N_("Scroll"),          &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
+	{ Type::IGNORE,  N_("Ignore"),          &typeid(Ignore),   CELL_RENDERER_TEXTISH_MODE_Key   },
+	{ Type::BUTTON,  N_("Button"),          &typeid(Button),   CELL_RENDERER_TEXTISH_MODE_Popup },
+	{ Type::MISC,    N_("WM Action (old)"), &typeid(Misc),     CELL_RENDERER_TEXTISH_MODE_Combo },
+	{ Type::GLOBAL,  N_("Global Action"),   &typeid(Global),   CELL_RENDERER_TEXTISH_MODE_Combo },
+	{ Type::VIEW,    N_("WM Action"),       &typeid(View),     CELL_RENDERER_TEXTISH_MODE_Combo },
+	{ Type::PLUGIN,  N_("Custom Plugin"),   &typeid(Plugin),   CELL_RENDERER_TEXTISH_MODE_Text  },
+	{ Type::COMMAND, 0,                     0,                 CELL_RENDERER_TEXTISH_MODE_Text  }
 };
 
-Type from_name(Glib::ustring name) {
-	for (TypeInfo *i = all_types;; i++)
+Type from_name(const Glib::ustring& name) {
+	for (const TypeInfo* i = all_types;; i++)
 		if (!i->name || _(i->name) == name)
 			return i->type;
 }
 
+const TypeInfo& type_info_from_name(const Glib::ustring& name) {
+	for (const TypeInfo* i = all_types;; i++)
+		if (!i->name || _(i->name) == name)
+			return *i;
+}
+
 const char *type_info_to_name(const std::type_info *info) {
-	for (TypeInfo *i = all_types; i->name; i++)
+	for (const TypeInfo* i = all_types; i->name; i++)
 		if (i->type_info == info)
 			return _(i->name);
 	return "";
@@ -186,7 +195,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	col_name->set_resizable();
 
 	type_store = Gtk::ListStore::create(type);
-	for (TypeInfo *i = all_types; i->name; i++)
+	for (const TypeInfo *i = all_types; i->name; i++)
 		(*(type_store->append()))[type.type] = _(i->name);
 
 	Gtk::CellRendererCombo *type_renderer = Gtk::manage(new Gtk::CellRendererCombo);
@@ -203,9 +212,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	col_type->add_attribute(type_renderer->property_text(), cols.type);
 	col_type->set_cell_data_func(*type_renderer, sigc::mem_fun(*this, &Actions::on_cell_data_type));
 
-	int i = 0;
-	while (Misc::types[i]) i++;
-	CellRendererTextish *arg_renderer = cell_renderer_textish_new_with_items ((gchar**)Misc::types, i);
+	CellRendererTextish *arg_renderer = cell_renderer_textish_new ();
 	GtkTreeViewColumn *col_arg = gtk_tree_view_column_new_with_attributes(_("Details"), GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index(), nullptr);
 	gtk_tree_view_append_column(tv.gobj(), col_arg);
 
@@ -421,7 +428,19 @@ void Actions::on_cell_data_arg(GtkCellRenderer *cell, gchar *path) {
 	if (!renderer)
 		return;
 	Glib::ustring str = (*iter)[cols.type];
-	renderer->mode = all_types[from_name(str)].mode;
+	const auto& type_info = type_info_from_name(str);
+	renderer->mode = type_info.mode;
+	switch(type_info.type) {
+		case Type::MISC:
+			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(Misc::types), Misc::n_actions);
+			break;
+		case Type::GLOBAL:
+			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(Global::types), Global::n_actions);
+			break;
+		case Type::VIEW:
+			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(View::types), View::n_actions);
+			break;
+	}
 }
 
 int Actions::compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b) {
@@ -590,45 +609,70 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 	} else {
 		row[cols.type] = new_text;
 		RAction new_action;
-		if (new_type == COMMAND) {
-			Glib::ustring cmd_save = row[cols.cmd_save];
-			if (cmd_save != "")
-				edit = false;
-			new_action = Command::create(cmd_save);
-		}
-		if (old_type == COMMAND) {
+		if (old_type == Type::COMMAND) {
 			row[cols.cmd_save] = (Glib::ustring)row[cols.arg];
 		}
-		if (new_type == KEY) {
-			new_action = SendKey::create(0, (Gdk::ModifierType)0);
-			edit = true;
+		if (old_type == Type::PLUGIN) {
+			row[cols.plugin_action_save] = (Glib::ustring)row[cols.arg];
 		}
-		if (new_type == TEXT) {
-			new_action = SendText::create(Glib::ustring());
-			edit = true;
-		}
-		if (new_type == SCROLL) {
-			new_action = Scroll::create((Gdk::ModifierType)0);
-			edit = false;
-		}
-		if (new_type == IGNORE) {
-			new_action = Ignore::create((Gdk::ModifierType)0);
-			edit = false;
-		}
-		if (new_type == BUTTON) {
-			new_action = Button::create((Gdk::ModifierType)0, 0);
-			edit = true;
-		}
-		if (new_type == MISC) {
-			new_action = Misc::create(Misc::Type::NONE);
-			edit = true;
+		
+		switch(new_type) {
+			case Type::COMMAND:
+				{
+					Glib::ustring cmd_save = row[cols.cmd_save];
+					if (cmd_save != "")
+						edit = false;
+					new_action = Command::create(cmd_save);
+				}
+				break;
+			case Type::KEY:
+				new_action = SendKey::create(0, (Gdk::ModifierType)0);
+				edit = true;
+				break;
+			case Type::TEXT:
+				new_action = SendText::create(Glib::ustring());
+				edit = true;
+				break;
+			case Type::SCROLL:
+				new_action = Scroll::create((Gdk::ModifierType)0);
+				edit = false;
+				break;
+			case Type::IGNORE:
+				new_action = Ignore::create((Gdk::ModifierType)0);
+				edit = false;
+				break;
+			case Type::BUTTON:
+				new_action = Button::create((Gdk::ModifierType)0, 0);
+				edit = true;
+				break;
+			case Type::MISC:
+				new_action = Misc::create(Misc::Type::NONE);
+				edit = true;
+				break;
+			case Type::GLOBAL:
+				new_action = Global::create(Global::Type::NONE);
+				edit = true;
+				break;
+			case Type::VIEW:
+				new_action = View::create(View::Type::NONE);
+				edit = true;
+				break;
+			case Type::PLUGIN:
+				{
+					Glib::ustring cmd_save = row[cols.plugin_action_save];
+					if (cmd_save != "")
+						edit = false;
+					new_action = Plugin::create(cmd_save);
+				}
+				break;
 		}
 		action_list->set_action(row[cols.id], new_action);
 		update_row(row);
 		update_actions();
 	}
 	editing_new = false;
-	if (new_type != MISC) focus(row[cols.id], 3, edit);
+	if (! (new_type == Type::MISC || new_type == Type::VIEW || new_type == Type::GLOBAL))
+		focus(row[cols.id], 3, edit);
 }
 
 void Actions::on_button_delete() {
@@ -852,19 +896,6 @@ class Actions::OnStroke {
 	Gtk::TreeRow &row;
 public:
 	void run(RStroke stroke) {
-/*		if (stroke->button == 0 && stroke->trivial()) {
-			grabber->queue_suspend();
-			Glib::ustring msg = Glib::ustring::compose(
-					_("You are about to bind an action to a single click.  "
-						"This might make it difficult to use Button %1 in the future.  "
-						"Are you sure you want to continue?"),
-					stroke->button ? stroke->button : prefs.button.ref().button);
-			Gtk::MessageDialog md(*dialog, msg, false, Gtk::MESSAGE_WARNING, Gtk::BUTTONS_YES_NO, true);
-			bool abort = md.run() != Gtk::RESPONSE_YES;
-			grabber->queue_resume();
-			if (abort)
-				return false;
-		} */
 		StrokeSet strokes;
 		strokes.insert(stroke);
 		parent->action_list->set_strokes(row[parent->cols.id], strokes);
@@ -874,12 +905,6 @@ public:
 		dialog->response(0);
 	}
 	OnStroke(Actions *parent_, Gtk::Dialog *dialog_, Gtk::TreeRow &row_) : parent(parent_), dialog(dialog_), row(row_) {}
-/*	void delayed_run(RStroke stroke_) {
-		stroke = stroke_;
-		Glib::signal_idle().connect(sigc::mem_fun(*this, &OnStroke::run));
-		stroke_action.reset();
-		recording.set(false);
-	} */
 };
 
 
@@ -899,35 +924,20 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	}
 	
 	static Gtk::Button *del = 0, *cancel = 0;
-	if (!del) {
-		widgets->get_widget("button_record_delete", del);
-		//~ del->signal_enter().connect(sigc::mem_fun(*grabber, &Grabber::queue_suspend));
-		//~ del->signal_leave().connect(sigc::mem_fun(*grabber, &Grabber::queue_resume));
-	}
-	if (!cancel) {
-		widgets->get_widget("button_record_cancel", cancel);
-		//~ cancel->signal_enter().connect(sigc::mem_fun(*grabber, &Grabber::queue_suspend));
-		//~ cancel->signal_leave().connect(sigc::mem_fun(*grabber, &Grabber::queue_resume));
-	}
+	if (!del) widgets->get_widget("button_record_delete", del);
+	if (!cancel) widgets->get_widget("button_record_cancel", cancel);
 	RStrokeInfo si = action_list->get_info(row[cols.id]);
-	if (si)
-		del->set_sensitive(si->strokes.size() != 0);
+	if (si) del->set_sensitive(si->strokes.size() != 0);
 
 	OnStroke ps(this, dialog, row);
 	sigc::connection sig = drawarea->stroke_recorded.connect(sigc::mem_fun(ps, &OnStroke::run));
 	
-/*	stroke_action.reset(new sigc::slot<void, RStroke>(sigc::mem_fun(ps, &OnStroke::delayed_run)));
-	recording.set(true); */
-
 	dialog->show_all();
 	cancel->grab_focus();
 	int response = dialog->run();
 	dialog->hide();
 	sig.disconnect();
 	drawarea->clear();
-/*	stroke_action.reset();
-	recording.set(false); */
-	// delete dialog;
 	if (response != 1)
 		return;
 
@@ -1022,11 +1032,14 @@ void Actions::on_name_edited(const Glib::ustring& path, const Glib::ustring& new
 void Actions::on_text_edited(const gchar *path, const gchar *new_text) {
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
-	if (type == COMMAND) {
+	if (type == Type::COMMAND) {
 		action_list->set_action(row[cols.id], Command::create(new_text));
-	} else if (type == TEXT) {
+	} else if (type == Type::TEXT) {
 		action_list->set_action(row[cols.id], SendText::create(new_text));
-	} else return;
+	} else if (type == Type::PLUGIN) {
+		action_list->set_action(row[cols.id], Plugin::create(new_text));
+	}
+	else return;
 	update_row(row);
 	update_actions();
 }
@@ -1035,19 +1048,19 @@ void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModi
 	uint32_t accel_mods = KeyCodes::convert_modifier(mods);
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
-	if (type == KEY) {
+	if (type == Type::KEY) {
 		RSendKey send_key = SendKey::create(accel_key, accel_mods);
 		Glib::ustring str = get_action_label(send_key);
 		if (row[cols.arg] == str)
 			return;
 		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(send_key));
-	} else if (type == SCROLL) {
+	} else if (type == Type::SCROLL) {
 		RScroll scroll = Scroll::create(accel_mods);
 		Glib::ustring str = get_action_label(scroll);
 		if (row[cols.arg] == str)
 			return;
 		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(scroll));
-	} else if (type == IGNORE) {
+	} else if (type == Type::IGNORE) {
 		RIgnore ignore = Ignore::create(accel_mods);
 		Glib::ustring str = get_action_label(ignore);
 		if (row[cols.arg] == str)
@@ -1059,12 +1072,27 @@ void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModi
 }
 
 void Actions::on_combo_edited(const gchar *path_string, guint item) {
-	RMisc misc = Misc::create((Misc::Type)item);
-	Glib::ustring str = get_action_label(misc);
+	RAction action;
 	Gtk::TreeRow row(*tm->get_iter(path_string));
+	Type type = from_name(row[cols.type]);
+	switch(type) {
+		case Type::MISC:
+			action = Misc::create((Misc::Type)item);
+			// boost::static_pointer_cast<Action>
+			break;
+		case Type::GLOBAL:
+			action = Global::create((Global::Type)item);
+			break;
+		case Type::VIEW:
+			action = View::create((View::Type)item);
+			break;
+		default:
+			return;
+	}
+	Glib::ustring str = get_action_label(action);
 	if (row[cols.arg] == str)
 		return;
-	action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(misc));
+	action_list->set_action(row[cols.id], action);
 	update_row(row);
 	update_actions();
 }
@@ -1080,7 +1108,7 @@ void Actions::on_something_editing_started(G_GNUC_UNUSED Gtk::CellEditable* edit
 void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_GNUC_UNUSED const gchar *path) {
 	tv.grab_focus();
 	Gtk::TreeRow row(*tm->get_iter(path));
-	if (from_name(row[cols.type]) != BUTTON)
+	if (from_name(row[cols.type]) != Type::BUTTON)
 		return;
 	ButtonInfo bi;
 	RButton bt = boost::static_pointer_cast<Button>(action_list->get_info(row[cols.id])->action);
@@ -1275,6 +1303,17 @@ struct ActionLabel : public ActionVisitor {
 			auto t = action->get_action_type();
 			label = Misc::get_misc_type_str(t);
 		}
+		void visit(const Global* action) override {
+			auto t = action->get_action_type();
+			label = Global::get_type_str(t);
+		}
+		void visit(const View* action) override {
+			auto t = action->get_action_type();
+			label = View::get_type_str(t);
+		}
+		void visit(const Plugin* action) override {
+			label = action->get_action();
+		}
 		
 		const Glib::ustring get_label() const { return label; }
 };
@@ -1293,10 +1332,17 @@ ButtonInfo Button::get_button_info() const {
 	return bi;
 }
 
-const char *Misc::types[8] = { N_("None"), N_("Close"), N_("Show wstroke settings"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize"), nullptr };
+const char* Misc::types[Misc::n_actions] = { N_("None"), N_("Close"), N_("Show wstroke settings"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize") };
 
 const char* Misc::get_misc_type_str(Type type) { return _(types[static_cast<int>(type)]); }
 
+const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"), N_("Configure gestures") };
+
+const char* Global::get_type_str(Type type) { return types[static_cast<int>(type)]; }
+
+const char* View::types[View::n_actions] = { N_("None"), N_("Close"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize"), N_("Toggle fullscreen") };
+
+const char* View::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 
 Glib::ustring ButtonInfo::get_button_text() const {
 	Glib::ustring str;

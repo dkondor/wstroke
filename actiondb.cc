@@ -66,12 +66,20 @@ BOOST_CLASS_EXPORT(Scroll)
 BOOST_CLASS_EXPORT(Ignore)
 BOOST_CLASS_EXPORT(Button)
 BOOST_CLASS_EXPORT(Misc)
+BOOST_CLASS_EXPORT(Global)
+BOOST_CLASS_EXPORT(View)
+BOOST_CLASS_EXPORT(Plugin)
 
 template<class Archive> void Unique::serialize(G_GNUC_UNUSED Archive & ar, G_GNUC_UNUSED unsigned int version) {}
 
 template<class Archive> void Action::serialize(G_GNUC_UNUSED Archive & ar, G_GNUC_UNUSED unsigned int version) {}
 
 template<class Archive> void Command::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & cmd;
+}
+
+template<class Archive> void Plugin::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
 	ar & boost::serialization::base_object<Action>(*this);
 	ar & cmd;
 }
@@ -129,6 +137,36 @@ template<class Archive> void Misc::serialize(Archive & ar, G_GNUC_UNUSED unsigne
 	ar & type;
 }
 
+RAction Misc::convert() const {
+	switch(type) {
+		case Type::CLOSE:
+			return View::create(View::Type::CLOSE);
+		case Type::SHOWHIDE:
+			return Global::create(Global::Type::SHOW_CONFIG);
+		case Type::MAXIMIZE:
+			return View::create(View::Type::MAXIMIZE);
+		case Type::MOVE:
+			return View::create(View::Type::MOVE);
+		case Type::RESIZE:
+			return View::create(View::Type::RESIZE);
+		case Type::MINIMIZE:
+			return View::create(View::Type::MINIMIZE);
+		case Type::NONE:
+		default:
+			return Global::create(Global::Type::NONE);
+	}
+}
+
+template<class Archive> void Global::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & type;
+}
+
+template<class Archive> void View::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & type;
+}
+
 template<class Archive> void StrokeSet::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
 	ar & boost::serialization::base_object<std::set<RStroke> >(*this);
 }
@@ -136,6 +174,14 @@ template<class Archive> void StrokeSet::serialize(Archive & ar, G_GNUC_UNUSED un
 template<class Archive> void StrokeInfo::serialize(Archive & ar, const unsigned int version) {
 	ar & strokes;
 	ar & action;
+	if (version < 2) {
+		/* convert Misc actions to new types */
+		Misc* misc = dynamic_cast<Misc*>(action.get());
+		if(misc) {
+			RAction new_action = misc->convert();
+			action = new_action;
+		}
+	}
 	if (version == 0) return;
 	ar & name;
 }

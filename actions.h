@@ -90,7 +90,7 @@ private:
 			add(name_bold); add(action_bold); add(deactivated);
 		}
 		Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
-		Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save;
+		Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
 		Gtk::TreeModelColumn<Unique *> id;
 		Gtk::TreeModelColumn<bool> name_bold, action_bold;
 		Gtk::TreeModelColumn<bool> deactivated;

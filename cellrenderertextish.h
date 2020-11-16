@@ -55,6 +55,9 @@ CellRendererTextish* cell_renderer_textish_new_with_items (gchar** items,
 CellRendererTextish* cell_renderer_textish_construct_with_items (GType object_type,
                                                                  gchar** items,
                                                                  int items_length1);
+void cell_renderer_textish_set_items (CellRendererTextish* self,
+                                      gchar** items_,
+                                      int items__length1);
 
 
 G_END_DECLS

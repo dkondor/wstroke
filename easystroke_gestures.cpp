@@ -156,12 +156,12 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			if(key) {
 				idle_generate.run_once([this, mod, key, needs_refocus_tmp] () {
 					uint32_t t = wf::get_current_time();
-					keyboard_modifiers(t, mod, WLR_KEY_PRESSED);
+					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
 					if(mod) input.keyboard_mods(mod, 0, 0);
-					input.keyboard_key(t, key - 8, WLR_KEY_PRESSED);
+					input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_PRESSED);
 					t++;
-					input.keyboard_key(t, key - 8, WLR_KEY_RELEASED);
-					keyboard_modifiers(t, mod, WLR_KEY_RELEASED);
+					input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_RELEASED);
+					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					if(mod) input.keyboard_mods(0, 0, 0);
 					if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
 				});
@@ -386,7 +386,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 	std::pair<enum wlr_keyboard_modifier, uint32_t>(WLR_MODIFIER_LOGO, KEY_LEFTMETA)
 };
 		
-		void keyboard_modifiers(uint32_t t, uint32_t mod, enum wlr_key_state state) {
+		void keyboard_modifiers(uint32_t t, uint32_t mod, enum wl_keyboard_key_state state) {
 			for(const auto& x : mod_map) 
 				if(x.first & mod) input.keyboard_key(t, x.second, state);
 		}

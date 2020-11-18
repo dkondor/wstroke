@@ -98,12 +98,12 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
     wl_signal_emit(&(input_pointer->pointer->events.button), &ev);
 }
 
-void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wlr_key_state state) {
+void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state) {
 	if(!(input_keyboard && headless_backend)) {
 		LOGW("No input device created!");
 		return;
 	}
-	LOGI("Emitting keyboard event ", key, state == WLR_KEY_PRESSED ? ", pressed" : ", released");
+	LOGI("Emitting keyboard event ", key, state == WL_KEYBOARD_KEY_STATE_PRESSED ? ", pressed" : ", released");
 	wlr_event_keyboard_key ev;
 	ev.keycode = key;
 	ev.state = state;

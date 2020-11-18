@@ -24,6 +24,7 @@
 extern "C" {
 #include <wlr/backend.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wayland-server-protocol.h>
 }
 
 class input_headless {
@@ -37,7 +38,7 @@ class input_headless {
 		/* emit a mouse button event */
 		void pointer_button(uint32_t time_msec, uint32_t button, enum wlr_button_state state);
 		/* emit a keyboard event */
-		void keyboard_key(uint32_t time_msec, uint32_t key, enum wlr_key_state state);
+		void keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state);
 		/* modify the modifier state of the keyboard */
 		void keyboard_mods(uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked);
 		

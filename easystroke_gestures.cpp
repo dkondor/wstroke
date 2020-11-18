@@ -438,7 +438,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			if(!ensure_fb()) return;
 	
 			wf::dimensions_t dim = output->get_screen_size();
-			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
+			auto ortho = glm::ortho(0.0f, (float)dim.width, 0.0f, (float)dim.height);
 			
 			float stroke_width = 2.0;
 			OpenGL::render_begin(fb);

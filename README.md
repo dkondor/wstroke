@@ -27,7 +27,8 @@ An example configuration file is under [example/actions-wstroke](example/actions
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing stokes (will log output with matches).
- - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Actions" and the appropriate action).
+ - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
+ - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action" or "Custom Plugin" can be used with giving the plugin activator name directly).
  - Generating keypresses ("Key" action).
  - Running commands as a gesture action.
  - Getting keybindings and mouse button bindings in the configuration for actions.
@@ -39,5 +40,4 @@ An example configuration file is under [example/actions-wstroke](example/actions
 ### What does not work
 
  - Any other action (ignore, button press, scroll, etc.)
- - Reloading the configuration if edited while Wayfire is running (has to reload the plugin to apply any changes).
 

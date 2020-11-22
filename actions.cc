@@ -79,7 +79,7 @@ const TypeInfo all_types[] = {
 	{ Type::SCROLL,  N_("Scroll"),          &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
 	{ Type::IGNORE,  N_("Ignore"),          &typeid(Ignore),   CELL_RENDERER_TEXTISH_MODE_Key   },
 	{ Type::BUTTON,  N_("Button"),          &typeid(Button),   CELL_RENDERER_TEXTISH_MODE_Popup },
-	{ Type::MISC,    N_("WM Action (old)"), &typeid(Misc),     CELL_RENDERER_TEXTISH_MODE_Combo },
+//	{ Type::MISC,    N_("WM Action (old)"), &typeid(Misc),     CELL_RENDERER_TEXTISH_MODE_Combo },
 	{ Type::GLOBAL,  N_("Global Action"),   &typeid(Global),   CELL_RENDERER_TEXTISH_MODE_Combo },
 	{ Type::VIEW,    N_("WM Action"),       &typeid(View),     CELL_RENDERER_TEXTISH_MODE_Combo },
 	{ Type::PLUGIN,  N_("Custom Plugin"),   &typeid(Plugin),   CELL_RENDERER_TEXTISH_MODE_Text  },
@@ -430,17 +430,11 @@ void Actions::on_cell_data_arg(GtkCellRenderer *cell, gchar *path) {
 	Glib::ustring str = (*iter)[cols.type];
 	const auto& type_info = type_info_from_name(str);
 	renderer->mode = type_info.mode;
-	switch(type_info.type) {
-		case Type::MISC:
-			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(Misc::types), Misc::n_actions);
-			break;
-		case Type::GLOBAL:
-			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(Global::types), Global::n_actions);
-			break;
-		case Type::VIEW:
-			cell_renderer_textish_set_items(renderer, const_cast<gchar**>(View::types), View::n_actions);
-			break;
-	}
+	
+	if(type_info.type == Type::GLOBAL)
+		cell_renderer_textish_set_items(renderer, const_cast<gchar**>(Global::types), Global::n_actions);
+	else if(type_info.type == Type::VIEW)
+		cell_renderer_textish_set_items(renderer, const_cast<gchar**>(View::types), View::n_actions);
 }
 
 int Actions::compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b) {
@@ -646,6 +640,7 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 				edit = true;
 				break;
 			case Type::MISC:
+				fprintf(stderr, "Got Misc action!\n");
 				new_action = Misc::create(Misc::Type::NONE);
 				edit = true;
 				break;
@@ -671,7 +666,7 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 		update_actions();
 	}
 	editing_new = false;
-	if (! (new_type == Type::MISC || new_type == Type::VIEW || new_type == Type::GLOBAL))
+	if (! (new_type == Type::VIEW || new_type == Type::GLOBAL))
 		focus(row[cols.id], 3, edit);
 }
 
@@ -1076,10 +1071,10 @@ void Actions::on_combo_edited(const gchar *path_string, guint item) {
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
 	switch(type) {
-		case Type::MISC:
+/*		case Type::MISC:
 			action = Misc::create((Misc::Type)item);
 			// boost::static_pointer_cast<Action>
-			break;
+			break; */
 		case Type::GLOBAL:
 			action = Global::create((Global::Type)item);
 			break;
@@ -1299,10 +1294,6 @@ struct ActionLabel : public ActionVisitor {
 		void visit(const Button* action) override {
 			label = action->get_button_info().get_button_text();
 		}
-		void visit(const Misc* action) override {
-			auto t = action->get_action_type();
-			label = Misc::get_misc_type_str(t);
-		}
 		void visit(const Global* action) override {
 			auto t = action->get_action_type();
 			label = Global::get_type_str(t);
@@ -1331,10 +1322,6 @@ ButtonInfo Button::get_button_info() const {
 	bi.state = mods;
 	return bi;
 }
-
-const char* Misc::types[Misc::n_actions] = { N_("None"), N_("Close"), N_("Show wstroke settings"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize") };
-
-const char* Misc::get_misc_type_str(Type type) { return _(types[static_cast<int>(type)]); }
 
 const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"), N_("Configure gestures") };
 

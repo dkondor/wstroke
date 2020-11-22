@@ -182,34 +182,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		void visit(const Button* action) override {
 			LOGW("Button action not implemented!");
 		}
-		/* TODO: remove this, use new actions */
-		void visit(const Misc* action) override {
-			if(action->get_action_type() == Misc::Type::SHOWHIDE) 
-				wf::get_core().run("wstroke-config");
-			if(!target_view) return;
-			switch(action->get_action_type()) {
-				case Misc::Type::CLOSE:
-					target_view->close();
-					break;
-				case Misc::Type::MINIMIZE:
-					target_view->minimize_request(true);
-					break;
-				case Misc::Type::MAXIMIZE:
-					/* toggle maximized state */
-					if(target_view->tiled_edges == wf::TILED_EDGES_ALL)
-						target_view->tile_request(0);
-					else target_view->tile_request(wf::TILED_EDGES_ALL);
-					break;
-				case Misc::Type::MOVE:
-					target_view->move_request();
-					break;
-				case Misc::Type::RESIZE:
-					target_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
-					break;
-				default:
-					break;
-			}
-		}
+		/* global actions */
 		void visit(const Global* action) override {
 			std::string plugin_activator;
 			switch(action->get_action_type()) {
@@ -230,6 +203,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			}
 			call_plugin(plugin_activator);
 		}
+		/* actions on the currently active view */
 		void visit(const View* action) override {
 			switch(action->get_action_type()) {
 				case View::Type::CLOSE:

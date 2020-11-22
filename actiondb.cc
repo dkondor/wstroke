@@ -139,19 +139,11 @@ template<class Archive> void Misc::serialize(Archive & ar, G_GNUC_UNUSED unsigne
 
 RAction Misc::convert() const {
 	switch(type) {
-		case Type::CLOSE:
-			return View::create(View::Type::CLOSE);
-		case Type::SHOWHIDE:
+		case SHOWHIDE:
 			return Global::create(Global::Type::SHOW_CONFIG);
-		case Type::MAXIMIZE:
-			return View::create(View::Type::MAXIMIZE);
-		case Type::MOVE:
-			return View::create(View::Type::MOVE);
-		case Type::RESIZE:
-			return View::create(View::Type::RESIZE);
-		case Type::MINIMIZE:
-			return View::create(View::Type::MINIMIZE);
-		case Type::NONE:
+		case NONE:
+		case DISABLE:
+		case UNMINIMIZE:
 		default:
 			return Global::create(Global::Type::NONE);
 	}

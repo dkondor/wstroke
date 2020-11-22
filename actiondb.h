@@ -66,7 +66,6 @@ class ActionVisitor {
 		virtual void visit(const Scroll* action) = 0;
 		virtual void visit(const Ignore* action) = 0;
 		virtual void visit(const Button* action) = 0;
-		virtual void visit(const Misc* action) = 0; /* TODO: remove this */
 		virtual void visit(const Global* action) = 0;
 		virtual void visit(const View* action) = 0;
 		virtual void visit(const Plugin* action) = 0;
@@ -253,23 +252,21 @@ public:
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 };
 
+/* Misc action -- not used anymore, kept only for compatibility with old Easystroke config files */
 class Misc : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type { NONE, CLOSE, SHOWHIDE, MAXIMIZE, MOVE, RESIZE, MINIMIZE };
+	enum Type { NONE, UNMINIMIZE, SHOWHIDE, DISABLE };
 	Type type;
 private:
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Misc(Type t) : type(t) {}
 public:
-	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::MINIMIZE) + 1;
-	static const char *types[n_actions];
-	static const char* get_misc_type_str(Type type);
 	Misc() {}
-	std::string get_type() const override { return "WM Action"; }
+	std::string get_type() const override { return "Misc"; }
 	static RMisc create(Type t) { return RMisc(new Misc(t)); }
-	Type get_action_type() const { return type; }
-	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	/* does nothing */
+	void visit(G_GNUC_UNUSED ActionVisitor* visitor) const override { return; }
 	/* convert old Misc actions to new representation */
 	RAction convert() const;
 };

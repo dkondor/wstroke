@@ -396,6 +396,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				 * necessary "refocus" to the idle loop. With this call,
 				 * we are adding the emulated click to the idle loop as well. */
 				idle_generate.run_once([this]() {
+					output->focus_view(initial_active_view, false);
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);

@@ -205,6 +205,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		}
 		/* actions on the currently active view */
 		void visit(const View* action) override {
+			if(!target_view) return;
 			switch(action->get_action_type()) {
 				case View::Type::CLOSE:
 					target_view->close();

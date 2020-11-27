@@ -350,7 +350,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				ps.back().x, ps.back().y);
 		}
 		
-		/* start drawing the stroke on the screen with the annotate plugin */
+		/* start drawing the stroke on the screen */
 		void start_drawing() {
 			for(size_t i = 1; i < ps.size(); i++)
 				draw_line(ps[i-1].x, ps[i-1].y, ps[i].x, ps[i].y);
@@ -442,8 +442,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		/* current annotation to be rendered -- store it in a framebuffer */
 		wf::framebuffer_t fb;
 		/* render function */
-		wf::post_hook_t render_hook = [=] (const wf::framebuffer_base_t& source,
-			const wf::framebuffer_base_t& destination) { render(source, destination); };
+		wf::effect_hook_t render_hook = [=] () { render(); };
 		/* flag to indicate if render_hook is active */
 		bool render_active = false;
 		wf::option_wrapper_t<wf::color_t> stroke_color{"easystroke/stroke_color"};
@@ -475,12 +474,13 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			damageRect.height += std::ceil(stroke_width + 1);
 		}
 
-		
+		/* draw a line into the overlay texture between the given points;
+		 * allocates the overlay texture if necessary and activates rendering */
 		void draw_line(int x1, int y1, int x2, int y2) {
 			if(!ensure_fb()) return;
 	
 			wf::dimensions_t dim = output->get_screen_size();
-			auto ortho = glm::ortho(0.0f, (float)dim.width, 0.0f, (float)dim.height);
+			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
 			
 			float stroke_width = 2.0;
 			OpenGL::render_begin(fb);
@@ -490,35 +490,34 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
 			OpenGL::render_end();
 			
-			if(!render_active) output->render->add_post(&render_hook);
+			if(!render_active) output->render->add_effect(&render_hook, wf::OUTPUT_EFFECT_OVERLAY);
 			render_active = true;
 			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
 			pad_damage_rect(d, stroke_width);
 			output->render->damage(d);
 		}
 		
+		/* clear everything rendered by this plugin and deactivate rendering */
 		void clear_lines() {
 			if(render_active) {
-				output->render->rem_post(&render_hook);
+				output->render->rem_effect(&render_hook);
 				fb.release();
 				output->render->damage_whole();
 				render_active = false;
 			}
 		}
 		
-		
-		void render(const wf::framebuffer_base_t& source, const wf::framebuffer_base_t& destination) {
-			wf::dimensions_t dim = output->get_screen_size();
+		/* render the current content of the overlay texture */
+		void render() {
+			if(fb.tex == (GLuint)-1) return;
+			auto out_fb = output->render->get_target_framebuffer();
+			auto geometry = output->get_relative_geometry();
+			auto ortho = out_fb.get_orthographic_projection();
 			
-			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
-			wf::geometry_t geom{0,0,dim.width,dim.height};
-			OpenGL::render_begin(destination);
-			
-			OpenGL::render_transformed_texture(source.tex, geom, ortho);
+			OpenGL::render_begin(out_fb);
 			GL_CALL(glEnable(GL_BLEND));
-			if(fb.tex != (GLuint)-1)
-				OpenGL::render_transformed_texture(fb.tex, geom, ortho);
-			// GL_CALL(glDisable(GL_BLEND));
+			OpenGL::render_transformed_texture(fb.tex, geometry, ortho);
+			GL_CALL(glDisable(GL_BLEND));
 			OpenGL::render_end();
 		}
 		

@@ -19,5 +19,26 @@
 			<_long>If set, the target of the gesture action is the view under the pointer when the gesture is initiated. Otherwise, it is the currently active view.</_long>
 			<default>true</default>
 		</option>
+		<option name="focus_mode" type="string">
+			<_short>Focus the view under the mouse</_short>
+			<_long>Specifies if the view under the mouse should be focused.</_long>
+			<default>no_gesture</default>
+			<desc>
+				<value>never</value>
+				<_name>Never</_name>
+			</desc>
+			<desc>
+				<value>no_gesture</value>
+				<_name>Only on click</_name>
+			</desc>
+			<desc>
+				<value>only_gesture</value>
+				<_name>Only on gesture</_name>
+			</desc>
+			<desc>
+				<value>always</value>
+				<_name>Always</_name>
+			</desc>
+		</option>
 	</plugin>
 </wayfire>

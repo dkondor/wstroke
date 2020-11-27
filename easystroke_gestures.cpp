@@ -71,6 +71,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::button_callback stroke_initiate;
 		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
 		wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
+		wf::option_wrapper_t<std::string> focus_mode{"easystroke/focus_mode"};
 		
 		PreStroke ps;
 		std::unique_ptr<ActionDB> actions;
@@ -78,6 +79,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::wl_idle_call idle_generate;
 		wayfire_view target_view;
 		wayfire_view initial_active_view;
+		wayfire_view mouse_view;
 		int inotify_fd = -1;
 		struct wl_event_source* inotify_source = nullptr;
 		static constexpr size_t inotify_buffer_size = 10*(sizeof(struct inotify_event) + NAME_MAX + 1);
@@ -220,6 +222,11 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 					break;
 				case View::Type::MOVE:
 					target_view->move_request();
+					/* in this case we don't refocus the original view,
+					 * since the move plugin will raise the selected view,
+					 * so it would be confusing for it not to end up
+					 * focused as well */
+					needs_refocus = false;
 					break;
 				case View::Type::RESIZE:
 					target_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
@@ -288,6 +295,15 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			needs_refocus = false;
 		}
 		
+		/* focus the view under the mouse if needed -- no gesture case */
+		void check_focus_mouse_view() {
+			if(mouse_view) {
+				const std::string& mode = focus_mode;
+				if(mode == "no_gesture" || mode == "always")
+					output->focus_view(mouse_view, true);
+			}
+		}
+		
 		/* callback when the stroke mouse button is pressed */
 		bool start_stroke(int32_t x, int32_t y) {
 			if(!actions) return false;
@@ -296,22 +312,21 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				return false;
 			}
 			
-			
 			initial_active_view = output->get_active_view();
 			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 				initial_active_view = nullptr;
-			if(target_mouse) {
-				target_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
-				if(target_view && target_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
-					target_view = nullptr;
-				if(target_view && target_view != initial_active_view) output->focus_view(target_view, false);
-			}
-			else target_view = initial_active_view;
+			
+			mouse_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
+			if(mouse_view && mouse_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
+				mouse_view = nullptr;
+			
+			target_view = target_mouse ? mouse_view : initial_active_view;
 			
 			if(target_view) {
 				const std::string& app_id = target_view->get_app_id();
 				if(actions->exclude_app(app_id)) {
 					LOGI("Excluding strokes for app: ", app_id);
+					check_focus_mouse_view();
 					return false;
 				}
 			}
@@ -339,10 +354,17 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				if(dist > 16.0f) {
 					is_gesture = true;
 					start_drawing();
+					if(target_mouse && target_view && target_view != initial_active_view) {
+						const std::string& mode = focus_mode;
+						if(mode == "always" || mode == "only_gesture") needs_refocus = false;
+						else needs_refocus = true;
+						/* raise the view if it should stay focused after the gesture */
+						output->focus_view(target_view, !needs_refocus);
+					}
 				}
 			}
 			ps.add(t);
-			draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
+			if(is_gesture) draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
 				ps.back().x, ps.back().y);
 		}
 		
@@ -370,7 +392,6 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
-				needs_refocus = target_mouse && (target_view != initial_active_view);
 				if(action) {
 					LOGI("Matched stroke: ", rr->name);
 					action->visit(this);
@@ -378,6 +399,8 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				else LOGI("Unmatched stroke");
 				if(needs_refocus) {
 					idle_generate.run_once([this]() {
+						/* note: initial_active_view can be NULL -- in this
+						 * case, we just unfocus the view under the mouse */
 						output->focus_view(initial_active_view, false);
 					});
 					needs_refocus = false;
@@ -385,7 +408,10 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				is_gesture = false;
 			}
 			else {
-				/* Note: we cannot directly generate a click since using the
+				/* Generate a "fake" mouse click to pass on to the view
+				 * originally under the mouse.
+				 * 
+				 * Note: we cannot directly generate a click since using the
 				 * grab interface "unfocuses" any view under the cursor for
 				 * the purpose of receiving these events. The
 				 * grab_interface->ungrab() call does not instantly reset
@@ -393,7 +419,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				 * necessary "refocus" to the idle loop. With this call,
 				 * we are adding the emulated click to the idle loop as well. */
 				idle_generate.run_once([this]() {
-					output->focus_view(initial_active_view, false);
+					check_focus_mouse_view();
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);

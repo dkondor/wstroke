@@ -13,6 +13,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+
 #include <wayfire/plugin.hpp>
 #include <wayfire/output.hpp>
 #include <wayfire/render-manager.hpp>
@@ -23,6 +24,7 @@
 #include <wayfire/view.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
+#include <memory>
 
 #include <linux/input-event-codes.h>
 extern "C"
@@ -71,7 +73,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
 		
 		PreStroke ps;
-		ActionDB* actions = nullptr;
+		std::unique_ptr<ActionDB> actions;
 		input_headless input;
 		wf::wl_idle_call idle_generate;
 		wayfire_view target_view;
@@ -130,10 +132,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 			output->rem_binding(&stroke_initiate);
 			input.fini();
 			color_program.free_resources();
-			if(actions) {
-				delete actions;
-				actions = nullptr;
-			}
+			actions.reset();
 			if(inotify_source) {
 				wl_event_source_remove(inotify_source);
 				inotify_source = nullptr;
@@ -255,10 +254,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 					LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
 					delete actions_tmp;
 				}
-				else {
-					if(actions) delete actions;
-					actions = actions_tmp;
-				}
+				else actions.reset(actions_tmp);
 			}
 			if(inotify_fd >= 0) {
 				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);

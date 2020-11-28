@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=WStroke config
+Type=Application
+Terminal=false
+Exec=wstroke-config
+Icon=wstroke
+Categories=GTK;Utility;Accessibility;
+Comment=Configure mouse gestures
+

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <wayfire>
-	<plugin name="easystroke">
-		<_short>Easystroke mouse gestures</_short>
+	<plugin name="wstroke">
+		<_short>Mouse Gestures</_short>
 		<_long>A plugin to identify complex gestures drawn by the mouse and associate them with actions.</_long>
 		<category>Accessibility</category>
 		<option name="initiate" type="button">

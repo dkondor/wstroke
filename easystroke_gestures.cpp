@@ -66,12 +66,12 @@ void main()
 
 
 
-class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
+class wstroke : public wf::plugin_interface_t, ActionVisitor {
 	protected:
 		wf::button_callback stroke_initiate;
-		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"easystroke/initiate"};
-		wf::option_wrapper_t<bool> target_mouse{"easystroke/target_view_mouse"};
-		wf::option_wrapper_t<std::string> focus_mode{"easystroke/focus_mode"};
+		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"wstroke/initiate"};
+		wf::option_wrapper_t<bool> target_mouse{"wstroke/target_view_mouse"};
+		wf::option_wrapper_t<std::string> focus_mode{"wstroke/focus_mode"};
 		
 		PreStroke ps;
 		std::unique_ptr<ActionDB> actions;
@@ -91,13 +91,13 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		bool is_gesture = false;
 		
 	public:
-		wayfire_easystroke() {
+		wstroke() {
 			stroke_initiate = [=](const wf::buttonbinding_t& btn) {
 				auto p = output->get_cursor_position();
 				return start_stroke(p.x, p.y);
 			};
 		}
-		~wayfire_easystroke() { fini(); }
+		~wstroke() { fini(); }
 		
 		void init() override {
 			inotify_fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
@@ -117,7 +117,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 				default_vertex_shader_source, color_rect_fragment_source));
 			OpenGL::render_end();
 			
-			grab_interface->name = "easystroke";
+			grab_interface->name = "wstroke";
 			grab_interface->capabilities = wf::CAPABILITY_GRAB_INPUT;
 			grab_interface->callbacks.pointer.motion = [=](int32_t x, int32_t y) {
 				handle_input_move(x, y);
@@ -276,7 +276,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		}
 		
 		static int config_updated(int fd, uint32_t mask, void* ptr) {
-			wayfire_easystroke* w = (wayfire_easystroke*)ptr;
+			wstroke* w = (wstroke*)ptr;
 			w->handle_config_updated();
 			return 0;
 		}
@@ -467,7 +467,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::effect_hook_t render_hook = [=] () { render(); };
 		/* flag to indicate if render_hook is active */
 		bool render_active = false;
-		wf::option_wrapper_t<wf::color_t> stroke_color{"easystroke/stroke_color"};
+		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
 		OpenGL::program_t color_program;
 		
 		
@@ -563,7 +563,7 @@ class wayfire_easystroke : public wf::plugin_interface_t, ActionVisitor {
 		}
 };
 
-constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> wayfire_easystroke::mod_map;
+constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> wstroke::mod_map;
 
-DECLARE_WAYFIRE_PLUGIN(wayfire_easystroke)
+DECLARE_WAYFIRE_PLUGIN(wstroke)
 

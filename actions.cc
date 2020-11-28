@@ -150,7 +150,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	sw->add(tv);
 	tv.show();
 	
-	Gtk::Button *button_add, *button_add_app, *button_add_group;
+	Gtk::Button *button_add, *button_add_app, *button_add_group, *button_about;
 	widgets->get_widget("button_add_action", button_add);
 	widgets->get_widget("button_delete_action", button_delete);
 	widgets->get_widget("button_record", button_record);
@@ -158,6 +158,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	widgets->get_widget("button_add_group", button_add_group);
 	widgets->get_widget("button_remove_app", button_remove_app);
 	widgets->get_widget("button_reset_actions", button_reset_actions);
+	widgets->get_widget("button_about", button_about);
 	widgets->get_widget("check_show_deleted", check_show_deleted);
 	widgets->get_widget("expander_apps", expander_apps);
 	widgets->get_widget("vpaned_apps", vpaned_apps);
@@ -168,6 +169,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	button_add_group->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_group));
 	button_remove_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_app));
 	button_reset_actions->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_reset_actions));
+	button_about->signal_clicked().connect(sigc::mem_fun(*this, &Actions::show_about_dialog));
 
 	tv.signal_row_activated().connect(sigc::mem_fun(*this, &Actions::on_row_activated));
 	tv.get_selection()->signal_changed().connect(sigc::mem_fun(*this, &Actions::on_selection_changed));
@@ -269,6 +271,12 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
 		row[exclude_cols.type] = cl;
 	}
+}
+
+void Actions::show_about_dialog() {
+	Gtk::AboutDialog *dialog;
+	widgets->get_widget("about-dialog", dialog);
+	dialog->run();
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {

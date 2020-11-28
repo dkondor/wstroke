@@ -13,6 +13,13 @@ project(
 	],
 )
 
+# paths (only needed to install icon and desktop file)
+prefix = get_option('prefix')
+datadir = join_paths(prefix, get_option('datadir'))
+icon_dir = join_paths(datadir, 'icons')
+desktop_dir = join_paths(datadir, 'applications')
+
+
 # dependencies for loadable plugin
 glibmm = dependency('glibmm-2.4')
 boost = dependency('boost', modules: ['serialization'], static: false)
@@ -139,16 +146,14 @@ wconf = executable('wstroke-config', wconf_sources,
 
 
 wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', 'gesture.cc', 'stroke.c']
-wslib = shared_module('easystroke', wslib_sources,
+wslib = shared_module('wstroke', wslib_sources,
     dependencies: [wayfire, wlroots, wlserver, boost, glibmm],
     install: true,
     install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],
     link_args: '-rdynamic')
+    
 
-
-
-install_data('easystroke.xml', install_dir: wayfire.get_variable(pkgconfig: 'metadatadir'))
-
-
-
+install_data('wstroke.xml', install_dir: wayfire.get_variable(pkgconfig: 'metadatadir'))
+install_data('wstroke-config.desktop', install_dir: desktop_dir)
+subdir('icons')

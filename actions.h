@@ -82,6 +82,8 @@ private:
 	bool select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name);
 	void on_add_exclude();
 	void on_remove_exclude();
+	
+	void show_about_dialog();
 
 	class ModelColumns : public Gtk::TreeModel::ColumnRecord {
 	public:

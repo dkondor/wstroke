@@ -35,129 +35,129 @@ public:
 };
 
 class Actions {
-public:
-	Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_);
-private:
-	void on_button_delete();
-	void on_button_new();
-	void on_selection_changed();
-	void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-	void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-	void on_something_editing_started(Gtk::CellEditable* editable, const Glib::ustring& path);
-	void on_something_editing_canceled();
-	void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
-	void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
-	void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
-public:
-	void on_accel_edited(const gchar *path_string, guint accel_key, GdkModifierType accel_mods);
-	void on_combo_edited(const gchar *path_string, guint item);
-	void on_arg_editing_started(GtkCellEditable *editable, const gchar *path);
-	void on_text_edited(const gchar *path, const gchar *new_text);
-	void on_cell_data_arg(GtkCellRenderer *cell, gchar *path);
-	
-private:
-	int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
-	class OnStroke;
-
-	void focus(Unique *id, int col, bool edit);
-	bool do_focus(Unique *id, Gtk::TreeViewColumn *col, bool edit);
-
-	bool select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, ActionListDiff *actions);
-	void on_add_app();
-	void on_add_group();
-	void on_group_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-	void on_apps_selection_changed();
-	void on_expanded();
-	void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions);
-	void on_cell_data_apps(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
-	void update_action_list();
-	void update_row(const Gtk::TreeRow &row);
-	void update_counts();
-	void on_remove_app();
-	
-	bool select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name);
-	void on_add_exclude();
-	void on_remove_exclude();
-	
-	class ModelColumns : public Gtk::TreeModel::ColumnRecord {
 	public:
-		ModelColumns() {
-			add(stroke); add(name); add(type); add(arg); add(cmd_save); add(id);
-			add(name_bold); add(action_bold); add(deactivated);
-		}
-		Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
-		Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
-		Gtk::TreeModelColumn<Unique *> id;
-		Gtk::TreeModelColumn<bool> name_bold, action_bold;
-		Gtk::TreeModelColumn<bool> deactivated;
-	};
-	class Store : public Gtk::ListStore {
-		Actions *parent;
+		Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_);
+	private:
+		void on_button_delete();
+		void on_button_new();
+		void on_selection_changed();
+		void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
+		void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
+		void on_something_editing_started(Gtk::CellEditable* editable, const Glib::ustring& path);
+		void on_something_editing_canceled();
+		void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
+		void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
+		void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 	public:
-		Store(const Gtk::TreeModelColumnRecord &columns, Actions *p) : Gtk::ListStore(columns), parent(p) {}
-		static Glib::RefPtr<Store> create(const Gtk::TreeModelColumnRecord &columns, Actions *parent) {
-			return Glib::RefPtr<Store>(new Store(columns, parent));
-		}
-	protected:
-		bool row_draggable_vfunc(const Gtk::TreeModel::Path &path) const;
-		bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
-		bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
-	};
-	class AppsStore : public Gtk::TreeStore {
-		Actions *parent;
-	public:
-		AppsStore(const Gtk::TreeModelColumnRecord &columns, Actions *p) : Gtk::TreeStore(columns), parent(p) {}
-		static Glib::RefPtr<AppsStore> create(const Gtk::TreeModelColumnRecord &columns, Actions *parent) {
-			return Glib::RefPtr<AppsStore>(new AppsStore(columns, parent));
-		}
-	protected:
-		bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
-		bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
-	};
-	ModelColumns cols;
-	TreeViewMulti tv;
-	Glib::RefPtr<Store> tm;
+		void on_accel_edited(const gchar *path_string, guint accel_key, GdkModifierType accel_mods);
+		void on_combo_edited(const gchar *path_string, guint item);
+		void on_arg_editing_started(GtkCellEditable *editable, const gchar *path);
+		void on_text_edited(const gchar *path, const gchar *new_text);
+		void on_cell_data_arg(GtkCellRenderer *cell, gchar *path);
+		
+	private:
+		int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
+		class OnStroke;
 
-	Gtk::TreeView *apps_view;
-	Glib::RefPtr<AppsStore> apps_model;
+		void focus(Unique *id, int col, bool edit);
+		bool do_focus(Unique *id, Gtk::TreeViewColumn *col, bool edit);
 
-	class Single : public Gtk::TreeModel::ColumnRecord {
-	public:
-		Single() { add(type); }
-		Gtk::TreeModelColumn<Glib::ustring> type;
-	};
-	Single type;
+		bool select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, ActionListDiff *actions);
+		void on_add_app();
+		void on_add_group();
+		void on_group_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
+		void on_apps_selection_changed();
+		void on_expanded();
+		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions);
+		void on_cell_data_apps(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
+		void update_action_list();
+		void update_row(const Gtk::TreeRow &row);
+		void update_counts();
+		void on_remove_app();
+		
+		bool select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name);
+		void on_add_exclude();
+		void on_remove_exclude();
+		
+		class ModelColumns : public Gtk::TreeModel::ColumnRecord {
+			public:
+				ModelColumns() {
+					add(stroke); add(name); add(type); add(arg); add(cmd_save); add(id);
+					add(name_bold); add(action_bold); add(deactivated);
+				}
+				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
+				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
+				Gtk::TreeModelColumn<Unique *> id;
+				Gtk::TreeModelColumn<bool> name_bold, action_bold;
+				Gtk::TreeModelColumn<bool> deactivated;
+		};
+		class Store : public Gtk::ListStore {
+			Actions *parent;
+			public:
+				Store(const Gtk::TreeModelColumnRecord &columns, Actions *p) : Gtk::ListStore(columns), parent(p) {}
+				static Glib::RefPtr<Store> create(const Gtk::TreeModelColumnRecord &columns, Actions *parent) {
+					return Glib::RefPtr<Store>(new Store(columns, parent));
+				}
+			protected:
+				bool row_draggable_vfunc(const Gtk::TreeModel::Path &path) const;
+				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
+				bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
+		};
+		class AppsStore : public Gtk::TreeStore {
+			Actions *parent;
+			public:
+				AppsStore(const Gtk::TreeModelColumnRecord &columns, Actions *p) : Gtk::TreeStore(columns), parent(p) {}
+				static Glib::RefPtr<AppsStore> create(const Gtk::TreeModelColumnRecord &columns, Actions *parent) {
+					return Glib::RefPtr<AppsStore>(new AppsStore(columns, parent));
+				}
+			protected:
+				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
+				bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
+		};
+		ModelColumns cols;
+		TreeViewMulti tv;
+		Glib::RefPtr<Store> tm;
 
-	class Apps : public Gtk::TreeModel::ColumnRecord {
-	public:
-		Apps() { add(app); add(actions); add(count); }
-		Gtk::TreeModelColumn<Glib::ustring> app;
-		Gtk::TreeModelColumn<ActionListDiff *> actions;
-		Gtk::TreeModelColumn<int> count;
-	};
-	Apps ca;
-	
-	/* exception list */
-	Single exclude_cols;
-	Glib::RefPtr<Gtk::ListStore> exclude_tm;
-	Gtk::TreeView* exclude_tv;
+		Gtk::TreeView *apps_view;
+		Glib::RefPtr<AppsStore> apps_model;
 
-	struct Focus;
+		class Single : public Gtk::TreeModel::ColumnRecord {
+			public:
+				Single() { add(type); }
+				Gtk::TreeModelColumn<Glib::ustring> type;
+		};
+		Single type;
 
-	Glib::RefPtr<Gtk::ListStore> type_store;
+		class Apps : public Gtk::TreeModel::ColumnRecord {
+			public:
+				Apps() { add(app); add(actions); add(count); }
+				Gtk::TreeModelColumn<Glib::ustring> app;
+				Gtk::TreeModelColumn<ActionListDiff *> actions;
+				Gtk::TreeModelColumn<int> count;
+		};
+		Apps ca;
+		
+		/* exception list */
+		Single exclude_cols;
+		Glib::RefPtr<Gtk::ListStore> exclude_tm;
+		Gtk::TreeView* exclude_tv;
 
-	Gtk::Button *button_record, *button_delete, *button_remove_app, *button_reset_actions;
-	Gtk::CheckButton *check_show_deleted;
-	Gtk::Expander *expander_apps;
-	Gtk::VPaned *vpaned_apps;
+		struct Focus;
 
-	int vpaned_position;
-	bool editing_new;
-	bool editing;
+		Glib::RefPtr<Gtk::ListStore> type_store;
 
-	ActionListDiff *action_list;
-	Glib::RefPtr<Gtk::Builder> widgets;
-	ActionDB& actions;
+		Gtk::Button *button_record, *button_delete, *button_remove_app, *button_reset_actions;
+		Gtk::CheckButton *check_show_deleted;
+		Gtk::Expander *expander_apps;
+		Gtk::VPaned *vpaned_apps;
+
+		int vpaned_position;
+		bool editing_new;
+		bool editing;
+
+		ActionListDiff *action_list;
+		Glib::RefPtr<Gtk::Builder> widgets;
+		ActionDB& actions;
 };
 
 

@@ -45,8 +45,6 @@ class Actions {
 		void on_selection_changed();
 		void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
 		void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-		void on_something_editing_started(Gtk::CellEditable* editable, const Glib::ustring& path);
-		void on_something_editing_canceled();
 		void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
 		void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
@@ -67,7 +65,6 @@ class Actions {
 		class OnStroke;
 
 		void focus(Unique *id, int col, bool edit);
-		bool do_focus(Unique *id, Gtk::TreeViewColumn *col, bool edit);
 
 		bool select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, ActionListDiff *actions);
 		void on_add_app();

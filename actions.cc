@@ -218,8 +218,9 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	Gtk::CellRendererText *name_renderer = dynamic_cast<Gtk::CellRendererText *>(tv.get_column_cell_renderer(n-1));
 	name_renderer->property_editable() = true;
 	name_renderer->signal_edited().connect(sigc::mem_fun(*this, &Actions::on_name_edited));
-	name_renderer->signal_editing_started().connect(sigc::mem_fun(*this, &Actions::on_something_editing_started));
-	name_renderer->signal_editing_canceled().connect(sigc::mem_fun(*this, &Actions::on_something_editing_canceled));
+	name_renderer->signal_editing_started().connect([this]
+		(G_GNUC_UNUSED Gtk::CellEditable* editable, G_GNUC_UNUSED const Glib::ustring& path) { editing = true; });
+	name_renderer->signal_editing_canceled().connect([this] () { editing_new = false; });
 	Gtk::TreeView::Column *col_name = tv.get_column(n-1);
 	col_name->set_sort_column(cols.name);
 	col_name->set_cell_data_func(*name_renderer, sigc::mem_fun(*this, &Actions::on_cell_data_name));
@@ -235,8 +236,9 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	type_renderer->property_text_column() = 0;
 	type_renderer->property_has_entry() = false;
 	type_renderer->signal_edited().connect(sigc::mem_fun(*this, &Actions::on_type_edited));
-	type_renderer->signal_editing_started().connect(sigc::mem_fun(*this, &Actions::on_something_editing_started));
-	type_renderer->signal_editing_canceled().connect(sigc::mem_fun(*this, &Actions::on_something_editing_canceled));
+	type_renderer->signal_editing_started().connect([this]
+		(G_GNUC_UNUSED Gtk::CellEditable* editable, G_GNUC_UNUSED const Glib::ustring& path) { editing = true; });
+	type_renderer->signal_editing_canceled().connect([this] () { editing_new = false; });
 
 	n = tv.append_column(_("Type"), *type_renderer);
 	Gtk::TreeView::Column *col_type = tv.get_column(n-1);
@@ -935,8 +937,6 @@ public:
 	OnStroke(Actions *parent_, Gtk::Dialog *dialog_, Gtk::TreeRow &row_) : parent(parent_), dialog(dialog_), row(row_) {}
 };
 
-
-
 void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED Gtk::TreeViewColumn* column) {
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Gtk::MessageDialog *dialog;
@@ -1021,20 +1021,19 @@ void Actions::on_button_new() {
 	update_counts();
 }
 
-bool Actions::do_focus(Unique *id, Gtk::TreeViewColumn *col, bool edit) {
-	if (!editing) {
-		Gtk::TreeModel::Children chs = tm->children();
-		for (Gtk::TreeIter i = chs.begin(); i != chs.end(); ++i)
-			if ((*i)[cols.id] == id) {
-				tv.set_cursor(Gtk::TreePath(*i), *col, edit);
-			}
-	}
-	return false;
-}
-
 void Actions::focus(Unique *id, int col, bool edit) {
 	editing = false;
-	Glib::signal_idle().connect(sigc::bind(sigc::mem_fun(*this, &Actions::do_focus), id, tv.get_column(col), edit));
+	Gtk::TreeViewColumn *col1 = tv.get_column(col);
+	Glib::signal_idle().connect([this, id, col1, edit] () {
+		if (!editing) {
+			Gtk::TreeModel::Children chs = tm->children();
+			for (Gtk::TreeIter i = chs.begin(); i != chs.end(); ++i)
+				if ((*i)[cols.id] == id) {
+					tv.set_cursor(Gtk::TreePath(*i), *col1, edit);
+				}
+		}
+		return false;
+	});
 }
 
 void Actions::on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text) {
@@ -1092,10 +1091,6 @@ void Actions::on_combo_edited(const gchar *path_string, guint item) {
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
 	switch(type) {
-/*		case Type::MISC:
-			action = Misc::create((Misc::Type)item);
-			// boost::static_pointer_cast<Action>
-			break; */
 		case Type::GLOBAL:
 			action = Global::create((Global::Type)item);
 			break;
@@ -1111,14 +1106,6 @@ void Actions::on_combo_edited(const gchar *path_string, guint item) {
 	action_list->set_action(row[cols.id], action);
 	update_row(row);
 	update_actions();
-}
-
-void Actions::on_something_editing_canceled() {
-	editing_new = false;
-}
-
-void Actions::on_something_editing_started(G_GNUC_UNUSED Gtk::CellEditable* editable, G_GNUC_UNUSED const Glib::ustring& path) {
-	editing = true;
 }
 
 void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_GNUC_UNUSED const gchar *path) {
@@ -1305,8 +1292,6 @@ void SelectButton::on_any_toggled() {
 	toggle_super->set_sensitive(!any);
 }
 
-
-
 struct ActionLabel : public ActionVisitor {
 	protected:
 		Glib::ustring label;
@@ -1387,6 +1372,4 @@ Glib::ustring ButtonInfo::get_button_text() const {
 		str += Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)state);
 	return str + Glib::ustring::compose(_("Button %1"), button);
 }
-
-
 

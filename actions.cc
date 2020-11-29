@@ -18,7 +18,7 @@
 #include "actiondb.h"
 #include "stroke_draw.h"
 #include "convert_keycodes.h"
-#include "toplevel-grabber.h"
+#include <toplevel-grabber.h>
 #include <glibmm/i18n.h>
 #include <gdkmm.h>
 #include <gdk/gdkwayland.h>

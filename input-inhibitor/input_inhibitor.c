@@ -18,7 +18,7 @@
  */
 
 
-#include "input_inhibitor.h"
+#include <input_inhibitor.h>
 #include <wlr-input-inhibitor-unstable-v1-client-protocol.h>
 #include <gdk/gdkwayland.h>
 

@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wayland-client.h>
-#include "toplevel-grabber.h"
+#include <toplevel-grabber.h>
 
 static int is_done = 0;
 

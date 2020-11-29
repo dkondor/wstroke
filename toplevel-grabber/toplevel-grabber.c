@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
-#include "toplevel-grabber.h"
+#include <toplevel-grabber.h>
 
 typedef struct zwlr_foreign_toplevel_handle_v1 wfthandle;
 

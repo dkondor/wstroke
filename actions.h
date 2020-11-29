@@ -18,6 +18,8 @@
 #define __ACTIONS_H__
 
 #include <gtkmm.h>
+#include <memory>
+#include <glibmm/main.h>
 #include "actiondb.h"
 
 
@@ -36,7 +38,7 @@ public:
 
 class Actions {
 	public:
-		Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_);
+		Actions(ActionDB& actions_, const std::string& config_dir_);
 	private:
 		void on_button_delete();
 		void on_button_new();
@@ -48,12 +50,17 @@ class Actions {
 		void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
 		void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
+		void save_actions();
+		void update_actions() { actions_changed = true; }
 	public:
 		void on_accel_edited(const gchar *path_string, guint accel_key, GdkModifierType accel_mods);
 		void on_combo_edited(const gchar *path_string, guint item);
 		void on_arg_editing_started(GtkCellEditable *editable, const gchar *path);
 		void on_text_edited(const gchar *path, const gchar *new_text);
 		void on_cell_data_arg(GtkCellRenderer *cell, gchar *path);
+		
+		Gtk::Window* get_main_win() { return main_win.get(); }
+		void exit() { exiting = true; save_actions(); }
 		
 	private:
 		int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
@@ -158,6 +165,14 @@ class Actions {
 		ActionListDiff *action_list;
 		Glib::RefPtr<Gtk::Builder> widgets;
 		ActionDB& actions;
+		
+		/* main window */
+		std::unique_ptr<Gtk::Window> main_win;
+		const std::string& config_dir;
+		Glib::RefPtr<Glib::TimeoutSource> timeout; /* timeout for saving changes */
+		bool actions_changed;
+		bool exiting;
+		bool save_error;
 };
 
 

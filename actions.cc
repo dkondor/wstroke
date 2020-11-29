@@ -133,17 +133,26 @@ static void on_actions_editing_started(GtkCellRenderer *, GtkCellEditable *edita
 	((Actions *)data)->on_arg_editing_started(editable, path);
 }
 
-static void update_actions() { }
-
-Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
+Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	apps_view(0),
 	vpaned_position(-1),
 	editing_new(false),
 	editing(false),
 	action_list(actions_.get_root()),
-	widgets(widgets_),
-	actions(actions_)
+	actions(actions_),
+	config_dir(config_dir_),
+	timeout(Glib::TimeoutSource::create(5000)),
+	actions_changed(false),
+	exiting(false),
+	save_error(false)
 {
+	widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
+	{
+		Gtk::Window* tmp = nullptr;
+		widgets->get_widget("main", tmp);
+		main_win.reset(tmp);
+	}
+	
 	Gtk::ScrolledWindow *sw;
 	widgets->get_widget("scrolledwindow_actions", sw);
 	widgets->get_widget("treeview_apps", apps_view);
@@ -291,6 +300,17 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
 		row[exclude_cols.type] = cl;
 	}
+	
+	/* timeout for saving actions */
+	timeout->connect([this] () {
+		if(exiting) return false;
+		if(actions_changed) {
+			save_actions();
+			actions_changed = false;
+		}
+		return true;
+	});
+	timeout->attach();
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {
@@ -336,7 +356,7 @@ static void app_id_cb(void* p, tl_grabber* gr) {
 	data->dialog->response(Gtk::RESPONSE_OK);	
 }
 
-static bool get_app_id_dialog(std::string& app_id) {
+static bool get_app_id_dialog(std::string& app_id, Gtk::Window& main_win) {
 	auto gdk_display = Gdk::Display::get_default();
 	struct tl_grabber* gr = nullptr;
 	struct wl_display* dpy = nullptr;
@@ -355,6 +375,7 @@ static bool get_app_id_dialog(std::string& app_id) {
 	}
 	
 	Gtk::Dialog dialog("Add new app", true);
+	dialog.set_transient_for(main_win);
 	auto x = dialog.get_content_area();
 	Gtk::Label label("Please select the app to add by clicking on it or click Cancel to enter the app ID manually");
 	x->pack_start(label, false, false, 10);
@@ -389,7 +410,7 @@ bool Actions::select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::Tr
 
 void Actions::on_add_exclude() {
 	std::string name; // = grabber->select_window();
-	if (!get_app_id_dialog(name)) return;
+	if (!get_app_id_dialog(name, *main_win)) return;
 	if (actions.add_exclude_app(name)) {
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
 		row[exclude_cols.type] = name;
@@ -529,7 +550,7 @@ bool Actions::AppsStore::drag_data_received_vfunc(const Gtk::TreeModel::Path &de
 		}
 	}
 	parent->update_action_list();
-	update_actions();
+	parent->update_actions();
 	return true;
 }
 
@@ -596,7 +617,7 @@ bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, 
 	if (sel->count_selected_rows() <= 1) {
 		if (parent->action_list->move(src_id, dest_id)) {
 			(*parent->tm->get_iter(src))[parent->cols.id] = src_id;
-			update_actions();
+			parent->update_actions();
 		}
 	} else {
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
@@ -608,7 +629,7 @@ bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, 
 		}
 		if (updated) {
 			parent->update_action_list();
-			update_actions();
+			parent->update_actions();
 		}
 	}
 	return false;
@@ -746,8 +767,8 @@ bool Actions::select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel:
 }
 
 void Actions::on_add_app() {
-	std::string name; // = grabber->select_window();
-	if (!get_app_id_dialog(name)) return;
+	std::string name;
+	if (!get_app_id_dialog(name, *main_win)) return;
 	if (actions.apps.count(name)) {
 		apps_model->foreach(sigc::bind(sigc::mem_fun(*this, &Actions::select_app), actions.apps[name]));
 		return;
@@ -908,7 +929,7 @@ public:
 		parent->action_list->set_strokes(row[parent->cols.id], strokes);
 		parent->update_row(row);
 		parent->on_selection_changed();
-		update_actions();
+		parent->update_actions();
 		dialog->response(0);
 	}
 	OnStroke(Actions *parent_, Gtk::Dialog *dialog_, Gtk::TreeRow &row_) : parent(parent_), dialog(dialog_), row(row_) {}
@@ -1118,6 +1139,29 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	update_actions();
 }
 
+void Actions::save_actions() {
+	if(save_error) return;
+	try {
+		actions.write(config_dir);
+	} catch (std::exception &e) {
+		save_error = true;
+		fprintf(stderr, _("Error: Couldn't save action database: %s.\n"), e.what());
+		auto error_message = Glib::ustring::compose(_( "Couldn't save %1.  Your changes will be lost.  "
+				"Make sure that \"%2\" is a directory and that you have write access to it.  "
+				"You can change the configuration directory "
+				"using the XDG_CONFIG_HOME environment variable."), _("actions"), config_dir);
+				
+		Gtk::MessageDialog dialog(error_message, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+		if(main_win->get_mapped()) dialog.set_transient_for(*main_win);
+		dialog.show();
+		dialog.run();
+		if(!exiting) {
+			auto app = Gtk::Application::get_default();
+			if(app) app->quit();
+			else Gtk::Main::quit();
+		}
+	}
+}
 
 SelectButton::SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_) {
 	widgets->get_widget("dialog_select", dialog);

@@ -90,12 +90,17 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		bool active = false;
 		bool is_gesture = false;
 		
+		std::string config_dir;
+		
 	public:
 		wstroke() {
 			stroke_initiate = [=](const wf::buttonbinding_t& btn) {
 				auto p = output->get_cursor_position();
 				return start_stroke(p.x, p.y);
 			};
+			char* xdg_config = getenv("XDG_CONFIG_HOME");
+			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
+			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
 		}
 		~wstroke() { fini(); }
 		
@@ -246,8 +251,6 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		
 		/* load / reload the configuration; also set up a watch for changes */
 		void reload_config() {
-			std::string config_dir = getenv("HOME");
-			config_dir += "/.config/wstroke/";
 			ActionDB* actions_tmp = new ActionDB();
 			if(actions_tmp) {
 				bool config_read = false;
@@ -265,7 +268,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			}
 			if(inotify_fd >= 0) {
 				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
-				std::string config_file = config_dir + "inotify_buffer_size";
+				std::string config_file = config_dir + "actions-wstroke";
 				inotify_add_watch(inotify_fd, config_file.c_str(), IN_MODIFY);
 			}
 		}

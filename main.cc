@@ -31,8 +31,6 @@
 #include "convert_keycodes.h"
 #include "input_inhibitor.h"
 
-Glib::RefPtr<Gtk::Builder> widgets;
-
 static void error_dialog(const Glib::ustring &text) {
 	Gtk::MessageDialog dialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	dialog.show();
@@ -42,9 +40,11 @@ static void error_dialog(const Glib::ustring &text) {
 
 int main(int argc, char **argv)
 {
-	std::string config_dir = getenv("HOME");
-	std::string old_config_dir = config_dir + "/.easystroke/";
-	config_dir += "/.config/wstroke";
+	char* xdg_config = getenv("XDG_CONFIG_HOME");
+	std::string home_dir = getenv("HOME");
+	std::string old_config_dir = home_dir + "/.easystroke/";
+	std::string config_dir = xdg_config ? std::string(xdg_config) + "/wstroke" :
+		home_dir + "/.config/wstroke";
 	
 	auto app = Gtk::Application::create(argc, argv, "org.wstroke.config");
 	
@@ -57,23 +57,22 @@ int main(int argc, char **argv)
 			error_dialog(Glib::ustring::compose(_( "Path for config files (%1) is not a directory! "
 				"Cannot store configuration. "
 				"You can change the configuration directory "
-				"using the -c or --config-dir command line options."
+				"using the XDG_CONFIG_HOME environment variable."
 				), config_dir));
 			return 1;
 		}
 	}
 	else {
 		if(!std::filesystem::create_directories(config_dir, ec)) {
-			error_dialog(Glib::ustring::compose(_( "Cannot create configuration directory \"%1\", cannot store the configuration. "
+			error_dialog(Glib::ustring::compose(_( "Cannot create configuration directory \"%1\"! "
+				"Cannot store the configuration. "
 				"You can change the configuration directory "
-				"using the -c or --config-dir command line options."
+				"using the XDG_CONFIG_HOME environment variable."
 				), config_dir));
 			return 1;
 		}
 	}
 	config_dir += '/';
-	
-	widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
 	
 	ActionDB actions_db;
 	bool config_read;
@@ -92,28 +91,14 @@ int main(int argc, char **argv)
 				"Some Key actions have missing values"));
 	
 	
-	Actions actions(widgets, actions_db);
-	
-	Gtk::Window* win = nullptr;
-	widgets->get_widget("main", win);
+	Actions actions(actions_db, config_dir);
 	
 	if(!input_inhibitor_init())
 		fprintf(stderr, _("Could not initialize keyboard grabber interface. Assigning key combinations might not work.\n"));
 	
-	app->run(*win, argc, argv);
-	try {
-		actions_db.write(config_dir);
-	} catch (std::exception &e) {
-		fprintf(stderr, _("Error: Couldn't save action database: %s.\n"), e.what());
-		// good_state = false;
-		error_dialog(Glib::ustring::compose(_( "Couldn't save %1.  Your changes will be lost.  "
-				"Make sure that \"%2\" is a directory and that you have write access to it.  "
-				"You can change the configuration directory "
-				"using the -c or --config-dir command line options."), _("actions"), config_dir));
-	}
+	app->run(*actions.get_main_win(), argc, argv);
+	actions.exit();
 	
-	
-	delete win;
 	return 0;
 }
 

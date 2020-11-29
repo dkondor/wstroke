@@ -83,8 +83,6 @@ private:
 	void on_add_exclude();
 	void on_remove_exclude();
 	
-	void show_about_dialog();
-
 	class ModelColumns : public Gtk::TreeModel::ColumnRecord {
 	public:
 		ModelColumns() {

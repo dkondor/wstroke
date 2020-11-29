@@ -150,6 +150,11 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	sw->add(tv);
 	tv.show();
 	
+	Gtk::AboutDialog *about_dialog;
+	widgets->get_widget("about-dialog", about_dialog);
+	about_dialog->set_wrap_license(true);
+	about_dialog->signal_response().connect([about_dialog](G_GNUC_UNUSED int response_id) { about_dialog->hide(); });
+	
 	Gtk::Button *button_add, *button_add_app, *button_add_group, *button_about;
 	widgets->get_widget("button_add_action", button_add);
 	widgets->get_widget("button_delete_action", button_delete);
@@ -169,7 +174,7 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	button_add_group->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_group));
 	button_remove_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_app));
 	button_reset_actions->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_reset_actions));
-	button_about->signal_clicked().connect(sigc::mem_fun(*this, &Actions::show_about_dialog));
+	button_about->signal_clicked().connect([about_dialog](){ about_dialog->run(); });
 
 	tv.signal_row_activated().connect(sigc::mem_fun(*this, &Actions::on_row_activated));
 	tv.get_selection()->signal_changed().connect(sigc::mem_fun(*this, &Actions::on_selection_changed));
@@ -271,12 +276,6 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
 		row[exclude_cols.type] = cl;
 	}
-}
-
-void Actions::show_about_dialog() {
-	Gtk::AboutDialog *dialog;
-	widgets->get_widget("about-dialog", dialog);
-	dialog->run();
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {

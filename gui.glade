@@ -1,31 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk+" version="3.20"/>
-  <object class="GtkAdjustment" id="adjustment_final_timeout">
-    <property name="upper">2500</property>
-    <property name="step_increment">5</property>
-    <property name="page_increment">20</property>
-  </object>
-  <object class="GtkAdjustment" id="adjustment_init_timeout">
-    <property name="upper">2500</property>
-    <property name="step_increment">5</property>
-    <property name="page_increment">20</property>
-  </object>
-  <object class="GtkAdjustment" id="adjustment_pressure_threshold">
-    <property name="upper">255</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="adjustment_scroll_speed">
-    <property name="upper">10</property>
-    <property name="step_increment">0.20000000000000001</property>
-    <property name="page_increment">1</property>
-  </object>
-  <object class="GtkAdjustment" id="adjustment_trace_width">
-    <property name="upper">20</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
   <object class="GtkMessageDialog" id="dialog_delete">
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
@@ -517,6 +492,7 @@
     <property name="window_position">center</property>
     <property name="default_width">800</property>
     <property name="default_height">600</property>
+    <property name="icon_name">wstroke</property>
     <child>
       <object class="GtkNotebook" id="notebook1">
         <property name="visible">True</property>
@@ -943,30 +919,29 @@
     </child>
   </object>
   <object class="GtkAboutDialog" id="about-dialog">
-    <property name="can_focus">False</property>
+    <property name="can_focus">True</property>
     <property name="type_hint">dialog</property>
+    <property name="transient_for">main</property>
     <property name="program_name">WStroke</property>
     <property name="version">1.0</property>
-    <property name="copyright" translatable="yes">Copyright (c) 2020, Daniel Kondor &lt;kondor.dani@gmail.com&gt;
+    <property name="copyright" translatable="yes">
+Copyright (c) 2020, Daniel Kondor &lt;kondor.dani@gmail.com&gt;
 Copyright (c) 2008-2016, Thomas Jaeger &lt;ThJaeger@gmail.com&gt;
 </property>
     <property name="comments" translatable="yes">Mouse gesture recognition plugin for Wayfire based on Easystroke.</property>
     <property name="website">https://github.com/dkondor/wstroke</property>
-    <property name="license" translatable="yes">Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
+    <property name="website_label" translatable="no">https://github.com/dkondor/wstroke</property>
+    <property name="license" translatable="yes">
+Copyright (c) 2008-2009, Thomas Jaeger &lt;ThJaeger@gmail.com&gt;
+Copyright (c) 2020, Daniel Kondor &lt;kondor.dani@gmail.com&gt;
+		
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
-FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THIS SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 </property>
     <property name="logo_icon_name">wstroke</property>
     <property name="license_type">custom</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">

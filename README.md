@@ -19,23 +19,38 @@ sudo ninja -C build install
 
 ### Running
 
-If correctly installed, it will show up as "Easystroke mouse gestures" plugin in WCM and can be enabled from there. Also, the mouse button for gestures can be changed there. Gesture actions can be configured by running `wstroke-config`. Configuration files are stored under `~/.config/wstroke`, in a format slightly updated from the original Easystroke. `wstroke-config` will read and convert any configuration from under `~/.easystroke` if this directory is empty.
+If correctly installed, it will show up as "Mouse Gestures" plugin in WCM and can be enabled from there, or with adding `wstroke` to the list of plugins (in `[core]`) in `~/.config/wayfire.ini`.
 
-An example configuration file is under [example/actions-wstroke](example/actions-wstroke). You can copy this file to `~/.config/wstroke` to get started as well. Note that the plugin will still need to be enabled in WCM to work.
+### Configuration
+
+Basic options such as the button used for gestures, or the target of gestures can be changed with WCM as the "Mouse Gestures" plugin, or by manually editing the `[wstroke]` section in `~/.config/wayfire.ini`. Note: trying to set a button will likely make WCM to show a warning (e.g. "Attempting to bind `BTN_RIGHT` without modifier"); it is safe to ignore this, since wstroke will forward button clicks when needed.
+
+Gestures can be configured by the standalone program `wstroke-config`. Recommended ways to obtain an initial configuration:
+ - If you have Easystroke installed, `wstroke-config` will attempt to import gestures from it, by looking for any of the `actions*` files under `~/.easystroke`. Even without Easystroke installed, copying the content of this directory from a previous installation can be used to import gestures. It is recommended to check that importing is done correctly.
+ - An example configuration file is under [example/actions-wstroke](example/actions-wstroke). You can copy this file to `~/.config/wstroke` to get started as well. Note that the plugin will still need to be enabled in WCM to work.
+
+Gestures are stored under `~/.config/wstroke/actions-wstroke`. It is recommended not to edit this file manually, but it can be copied between different computers, or backed up and restored manually.
+
+#### Focus settings ####
+For a better experience, it is recommended to diable the "click-to-focus" feature in Wayfire for the mouse button used for gestures. This will allow wstroke to manage focus when using this button and set the target of the gesture as requested by the user.
+
+To do this, under the "Core" tab of WCM, change the option "Mouse button to focus views" to *not* include the button used for gestures. E.g. if the right button is used, the setting here should not contain `BTN_RIGHT`, so it might look like `BTN_LEFT | BTN_MIDDLE` (note: it is best to set this by clicking on the edit button on the right of the setting and manually editing the text that corresponds to this setting). Don't be alarmed by the warning that appears ("Attempting to bind `BTN_LEFT | BTN_MIDDLE` without modifier"); this is exactly the intended behavior in this case.
+
+The same can be achieved by editing the option `focus_buttons` in the `[core]` section of `~/.config/wayfire.ini`.
 
 ### What works
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing stokes (will log output with matches).
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
- - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action" or "Custom Plugin" can be used with giving the plugin activator name directly).
+ - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly).
  - Generating keypresses ("Key" action).
  - Running commands as a gesture action.
  - Getting keybindings and mouse button bindings in the configuration for actions.
  - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
- - Identifying views and using application specific gestures or excluding certain apps completely.
+ - Identifying views and using application specific gestures or excluding certain apps completely; setting these in `wstroke-config` by interactively grabbing the app-id of an open view.
  - Option to target either the view under the mouse when starting the gesture (original Easystroke behavior) or the currently active one.
- - Interactively identifying running applications in `wstroke-config` (e.g. to add application specific gestures or exclude them).
+ - Option to change focus to the view under the mouse after a gesture.
  
 ### What does not work
 

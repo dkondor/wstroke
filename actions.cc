@@ -167,13 +167,28 @@ Actions::Actions(Glib::RefPtr<Gtk::Builder>& widgets_, ActionDB& actions_) :
 	widgets->get_widget("check_show_deleted", check_show_deleted);
 	widgets->get_widget("expander_apps", expander_apps);
 	widgets->get_widget("vpaned_apps", vpaned_apps);
-	button_record->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_button_record));
+	
+	button_record->signal_clicked().connect([this]() {
+		Gtk::TreeModel::Path path;
+		Gtk::TreeViewColumn *col;
+		tv.get_cursor(path, col);
+		on_row_activated(path, col);
+	});
 	button_delete->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_button_delete));
 	button_add->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_button_new));
 	button_add_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_app));
 	button_add_group->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_group));
 	button_remove_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_app));
-	button_reset_actions->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_reset_actions));
+	button_reset_actions->signal_clicked().connect([this]() {
+	std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
+		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
+			Gtk::TreeRow row(*tm->get_iter(*i));
+			action_list->reset(row[cols.id]);
+		}
+		update_action_list();
+		on_selection_changed();
+		update_actions();
+	});
 	button_about->signal_clicked().connect([about_dialog](){ about_dialog->run(); });
 
 	tv.signal_row_activated().connect(sigc::mem_fun(*this, &Actions::on_row_activated));
@@ -681,8 +696,11 @@ void Actions::on_button_delete() {
 	int n = tv.get_selection()->count_selected_rows();
 
 	Glib::ustring str;
-	if (n == 1)
-		str = Glib::ustring::compose(_("Action \"%1\" is about to be deleted."), get_selected_row()[cols.name]);
+	if (n == 1) {
+		std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
+		auto tmp = Gtk::TreeRow(*tm->get_iter(*paths.begin()));
+		str = Glib::ustring::compose(_("Action \"%1\" is about to be deleted."), tmp[cols.name]);
+	}
 	else
 		str = Glib::ustring::compose(ngettext("One action is about to be deleted.",
 					"%1 actions are about to be deleted", n), n);
@@ -778,17 +796,6 @@ void Actions::on_remove_app() {
 	update_actions();
 }
 
-void Actions::on_reset_actions() {
-	std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-	for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-		Gtk::TreeRow row(*tm->get_iter(*i));
-		action_list->reset(row[cols.id]);
-	}
-	update_action_list();
-	on_selection_changed();
-	update_actions();
-}
-
 void Actions::on_add_group() {
 	ActionListDiff *parent = action_list->app ? actions.get_root() : action_list;
 	Glib::ustring name = _("Group");
@@ -842,13 +849,11 @@ void Actions::on_apps_selection_changed() {
 	}
 }
 
-bool Actions::count_app_actions(const Gtk::TreeIter &i) {
-	(*i)[ca.count] = ((ActionListDiff*)(*i)[ca.actions])->count_actions();
-	return false;
-}
-
 void Actions::update_counts() {
-	apps_model->foreach_iter(sigc::mem_fun(*this, &Actions::count_app_actions));
+	apps_model->foreach_iter([this](const Gtk::TreeIter &i) {
+		(*i)[ca.count] = ((ActionListDiff*)(*i)[ca.actions])->count_actions();
+		return false;
+	});
 }
 
 void Actions::update_action_list() {
@@ -947,18 +952,6 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	update_row(row);
 	on_selection_changed();
 	update_actions();
-}
-
-void Actions::on_button_record() {
-	Gtk::TreeModel::Path path;
-	Gtk::TreeViewColumn *col;
-	tv.get_cursor(path, col);
-	on_row_activated(path, col);
-}
-
-Gtk::TreeRow Actions::get_selected_row() {
-	std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-	return Gtk::TreeRow(*tm->get_iter(*paths.begin()));
 }
 
 void Actions::on_selection_changed() {

@@ -40,7 +40,6 @@ public:
 private:
 	void on_button_delete();
 	void on_button_new();
-	void on_button_record();
 	void on_selection_changed();
 	void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
 	void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
@@ -59,7 +58,6 @@ public:
 private:
 	int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
 	class OnStroke;
-	Gtk::TreeRow get_selected_row();
 
 	void focus(Unique *id, int col, bool edit);
 	bool do_focus(Unique *id, Gtk::TreeViewColumn *col, bool edit);
@@ -74,9 +72,7 @@ private:
 	void on_cell_data_apps(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 	void update_action_list();
 	void update_row(const Gtk::TreeRow &row);
-	bool count_app_actions(const Gtk::TreeIter &i);
 	void update_counts();
-	void on_reset_actions();
 	void on_remove_app();
 	
 	bool select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name);

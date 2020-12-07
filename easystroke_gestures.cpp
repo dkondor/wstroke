@@ -72,6 +72,8 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"wstroke/initiate"};
 		wf::option_wrapper_t<bool> target_mouse{"wstroke/target_view_mouse"};
 		wf::option_wrapper_t<std::string> focus_mode{"wstroke/focus_mode"};
+		wf::option_wrapper_t<int> start_timeout{"wstroke/start_timeout"};
+		wf::option_wrapper_t<int> end_timeout{"wstroke/end_timeout"};
 		
 		PreStroke ps;
 		std::unique_ptr<ActionDB> actions;
@@ -89,6 +91,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		
 		bool active = false;
 		bool is_gesture = false;
+		
+		bool ptr_moved = false;
+		wf::wl_timer timeout;
 		
 		std::string config_dir;
 		
@@ -125,11 +130,16 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			grab_interface->name = "wstroke";
 			grab_interface->capabilities = wf::CAPABILITY_GRAB_INPUT;
 			grab_interface->callbacks.pointer.motion = [=](int32_t x, int32_t y) {
+				ptr_moved = true;
 				handle_input_move(x, y);
 			};
 			grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
+				// LOGI("button: ", button, "state: ", state);
 				wf::buttonbinding_t tmp = initiate;
-				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) end_stroke();
+				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) {
+					if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
+					else end_stroke();
+				}
 			};
 			output->add_button(initiate, &stroke_initiate);
 		}
@@ -369,6 +379,11 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			ps.add(t);
 			if(is_gesture) draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
 				ps.back().x, ps.back().y);
+			if(timeout.is_connected()) {
+				timeout.disconnect();
+				int timeout_len = end_timeout > 0 ? end_timeout : start_timeout;
+				timeout.set_timeout(timeout_len, [this]() { end_stroke(); });
+			}
 		}
 		
 		/* start drawing the stroke on the screen */
@@ -379,6 +394,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		
 		/* callback when the mouse button is released */
 		void end_stroke() {
+			if(!active) return; /* in case the timeout was not disconnected */
+			timeout.disconnect();
+			ptr_moved = false;
 			clear_lines();
 			grab_interface->ungrab();
 			output->deactivate_plugin(grab_interface);
@@ -443,7 +461,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			clear_lines();
 			if(target_mouse) output->focus_view(initial_active_view, false);
 			active = false;
+			ptr_moved = false;
 			is_gesture = false;
+			timeout.disconnect();
 		}
 		
 		static constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> mod_map = {

@@ -40,5 +40,15 @@
 				<_name>Always</_name>
 			</desc>
 		</option>
+		<option name="start_timeout" type="int">
+			<_short>Start timeout for strokes</_short>
+			<_long>Timeout after a right click to start a stroke. Can be used to generate strokes on touchpads.</_long>
+			<default>0</default>
+		</option>
+		<option name="end_timeout" type="int">
+			<_short>End timeout for strokes</_short>
+			<_long>Use this timeout for ending gestures if they were started with the previous timeout.</_long>
+			<default>0</default>
+		</option>
 	</plugin>
 </wayfire>

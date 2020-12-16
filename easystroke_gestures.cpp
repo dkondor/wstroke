@@ -558,11 +558,13 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			auto out_fb = output->render->get_target_framebuffer();
 			auto geometry = output->get_relative_geometry();
 			auto ortho = out_fb.get_orthographic_projection();
+			auto damage = output->render->get_swap_damage() & geometry;
 			
 			OpenGL::render_begin(out_fb);
-			GL_CALL(glEnable(GL_BLEND));
-			OpenGL::render_transformed_texture(fb.tex, geometry, ortho);
-			GL_CALL(glDisable(GL_BLEND));
+			for (auto& box : damage) {
+				out_fb.logic_scissor(wlr_box_from_pixman_box(box));
+				OpenGL::render_transformed_texture(fb.tex, geometry, ortho);
+			}
 			OpenGL::render_end();
 		}
 		

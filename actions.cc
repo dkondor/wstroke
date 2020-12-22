@@ -75,8 +75,8 @@ struct TypeInfo {
 const TypeInfo all_types[] = {
 	{ Type::COMMAND, N_("Command"),         &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Text  },
 	{ Type::KEY,     N_("Key"),             &typeid(SendKey),  CELL_RENDERER_TEXTISH_MODE_Key   },
-	{ Type::TEXT,    N_("Text"),            &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
-	{ Type::SCROLL,  N_("Scroll"),          &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
+//	{ Type::TEXT,    N_("Text"),            &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
+//	{ Type::SCROLL,  N_("Scroll"),          &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
 	{ Type::IGNORE,  N_("Ignore"),          &typeid(Ignore),   CELL_RENDERER_TEXTISH_MODE_Key   },
 	{ Type::BUTTON,  N_("Button"),          &typeid(Button),   CELL_RENDERER_TEXTISH_MODE_Popup },
 //	{ Type::MISC,    N_("WM Action (old)"), &typeid(Misc),     CELL_RENDERER_TEXTISH_MODE_Combo },

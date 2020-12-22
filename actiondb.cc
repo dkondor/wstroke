@@ -174,6 +174,21 @@ template<class Archive> void StrokeInfo::serialize(Archive & ar, const unsigned 
 			action = new_action;
 		}
 	}
+	if (version < 3) {
+		/* convert Scroll and Text actions to Global / None -- they are not supported */
+		Scroll* scroll = dynamic_cast<Scroll*>(action.get());
+		if(scroll) {
+			RAction new_action = Global::create(Global::Type::NONE);
+			action = new_action;
+		}
+		else {
+			SendText* text = dynamic_cast<SendText*>(action.get());
+			if(text) {
+				RAction new_action = Global::create(Global::Type::NONE);
+				action = new_action;
+			}
+		}
+	}
 	if (version == 0) return;
 	ar & name;
 }

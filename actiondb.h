@@ -342,7 +342,7 @@ public:
 	std::string name;
 };
 typedef boost::shared_ptr<StrokeInfo> RStrokeInfo;
-BOOST_CLASS_VERSION(StrokeInfo, 2)
+BOOST_CLASS_VERSION(StrokeInfo, 3)
 
 class Ranking {
 	static bool show(RRanking r);

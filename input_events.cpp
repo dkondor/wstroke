@@ -28,6 +28,7 @@ extern "C" {
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/types/wlr_seat.h>
 }
 
 #include <wayfire/util/log.hpp>
@@ -119,4 +120,12 @@ void input_headless::keyboard_mods(uint32_t mods_depressed, uint32_t mods_latche
 	}
 	LOGI("Changing keyboard modifiers");
 	wlr_keyboard_notify_modifiers(input_keyboard->keyboard, mods_depressed, mods_latched, mods_locked, 0);
+/*	struct wlr_seat* seat = wf::get_core().get_current_seat(); -- does not work: combining with the "real" keyboard
+	struct wlr_keyboard_modifiers modifiers;
+	modifiers.depressed = mods_depressed;
+	modifiers.latched = mods_latched;
+	modifiers.locked = mods_locked;
+	modifiers.group = 0; // ??
+	wlr_seat_keyboard_notify_modifiers(seat, &modifiers); */
 }
+

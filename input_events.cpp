@@ -90,7 +90,7 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
 		LOGW("No input device created!");
 		return;
 	}
-	LOGI("Emitting pointer button event");
+	LOGD("Emitting pointer button event");
 	wlr_event_pointer_button ev;
     ev.device = input_pointer;
     ev.button = button;
@@ -104,7 +104,7 @@ void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyb
 		LOGW("No input device created!");
 		return;
 	}
-	LOGI("Emitting keyboard event ", key, state == WL_KEYBOARD_KEY_STATE_PRESSED ? ", pressed" : ", released");
+	LOGD("Emitting keyboard event ", key, state == WL_KEYBOARD_KEY_STATE_PRESSED ? ", pressed" : ", released");
 	wlr_event_keyboard_key ev;
 	ev.keycode = key;
 	ev.state = state;
@@ -118,7 +118,7 @@ void input_headless::keyboard_mods(uint32_t mods_depressed, uint32_t mods_latche
 		LOGW("No input device created!");
 		return;
 	}
-	LOGI("Changing keyboard modifiers");
+	LOGD("Changing keyboard modifiers");
 	wlr_keyboard_notify_modifiers(input_keyboard->keyboard, mods_depressed, mods_latched, mods_locked, 0);
 /*	struct wlr_seat* seat = wf::get_core().get_current_seat(); -- does not work: combining with the "real" keyboard
 	struct wlr_keyboard_modifiers modifiers;

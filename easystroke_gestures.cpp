@@ -141,7 +141,6 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				handle_input_move(x, y);
 			};
 			grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
-				// LOGI("button: ", button, "state: ", state);
 				wf::buttonbinding_t tmp = initiate;
 				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) {
 					if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
@@ -174,7 +173,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		/* visitor interface for carrying out actions */
 		void visit(const Command* action) override {
 			const auto& cmd = action->get_cmd();
-			LOGI("Running command: ", cmd);
+			LOGD("Running command: ", cmd);
 			wf::get_core().run(cmd);
 		}
 		void visit(const SendKey* action) override {
@@ -396,7 +395,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			if(target_view) {
 				const std::string& app_id = target_view->get_app_id();
 				if(actions->exclude_app(app_id)) {
-					LOGI("Excluding strokes for app: ", app_id);
+					LOGD("Excluding strokes for app: ", app_id);
 					check_focus_mouse_view();
 					return false;
 				}
@@ -464,7 +463,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				const ActionListDiff* matcher = nullptr;
 				if(target_view) {
 					const std::string& app_id = target_view->get_app_id();
-					LOGI("Target app id: ", app_id);
+					LOGD("Target app id: ", app_id);
 					matcher = actions->get_action_list(app_id);
 				}
 				else matcher = actions->get_root();
@@ -472,10 +471,10 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				RRanking rr;
 				RAction action = matcher->handle(stroke, rr);
 				if(action) {
-					LOGI("Matched stroke: ", rr->name);
+					LOGD("Matched stroke: ", rr->name);
 					action->visit(this);
 				}
-				else LOGI("Unmatched stroke");
+				else LOGD("Unmatched stroke");
 				if(needs_refocus) {
 					idle_generate.run_once([this]() {
 						/* note: initial_active_view can be NULL -- in this

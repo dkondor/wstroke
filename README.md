@@ -45,14 +45,19 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
  - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly).
  - Generating keypresses ("Key" action).
+ - Generating mouse clicks ("Button" action).
+ - Generating modifiers ("Ignore" action -- only works in combination with mouse clicks, not the keyboard).
  - Running commands as a gesture action.
  - Getting keybindings and mouse button bindings in the configuration for actions.
  - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
  - Identifying views and using application specific gestures or excluding certain apps completely; setting these in `wstroke-config` by interactively grabbing the app-id of an open view.
  - Option to target either the view under the mouse when starting the gesture (original Easystroke behavior) or the currently active one.
  - Option to change focus to the view under the mouse after a gesture.
+ - Basic timeouts (move the mouse after clicking to have a gesture / end the gesture if not moving within a timeout).
  
 ### What does not work
 
- - Any other action (ignore, button press, scroll, etc.)
+ - Scroll action (removed from settings, will be converted to Global)
+ - SendText action (removed from settings, will be converted to Global)
+ - Ignore in combination with keyboard keypresses.
 

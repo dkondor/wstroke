@@ -143,7 +143,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
 				wf::buttonbinding_t tmp = initiate;
 				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) {
-					if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
+					if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); return false; });
 					else end_stroke();
 				}
 			};
@@ -439,7 +439,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			if(timeout.is_connected()) {
 				timeout.disconnect();
 				int timeout_len = end_timeout > 0 ? end_timeout : start_timeout;
-				timeout.set_timeout(timeout_len, [this]() { end_stroke(); });
+				timeout.set_timeout(timeout_len, [this]() { end_stroke(); return false; });
 			}
 		}
 		

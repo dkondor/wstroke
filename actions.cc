@@ -72,7 +72,7 @@ struct TypeInfo {
 	const CellRendererTextishMode mode;
 };
 
-const TypeInfo all_types[] = {
+static constexpr TypeInfo all_types[] = {
 	{ Type::COMMAND, N_("Command"),         &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Text  },
 	{ Type::KEY,     N_("Key"),             &typeid(SendKey),  CELL_RENDERER_TEXTISH_MODE_Key   },
 //	{ Type::TEXT,    N_("Text"),            &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
@@ -86,19 +86,21 @@ const TypeInfo all_types[] = {
 	{ Type::COMMAND, 0,                     0,                 CELL_RENDERER_TEXTISH_MODE_Text  }
 };
 
-Type from_name(const Glib::ustring& name) {
-	for (const TypeInfo* i = all_types;; i++)
+static Type from_name(const Glib::ustring& name) {
+	for (const TypeInfo* i = all_types; i->name; i++)
 		if (!i->name || _(i->name) == name)
 			return i->type;
+	return Type::COMMAND; /* not reached */
 }
 
-const TypeInfo& type_info_from_name(const Glib::ustring& name) {
-	for (const TypeInfo* i = all_types;; i++)
+static const TypeInfo& type_info_from_name(const Glib::ustring& name) {
+	for (const TypeInfo* i = all_types; i->name; i++)
 		if (!i->name || _(i->name) == name)
 			return *i;
+	return all_types[7]; /* not reached */
 }
 
-const char *type_info_to_name(const std::type_info *info) {
+static constexpr const char *type_info_to_name(const std::type_info *info) {
 	for (const TypeInfo* i = all_types; i->name; i++)
 		if (i->type_info == info)
 			return _(i->name);
@@ -116,8 +118,6 @@ static void on_actions_cell_data_arg(G_GNUC_UNUSED GtkTreeViewColumn *tree_colum
 }
 
 static void on_actions_accel_edited(CellRendererTextish *, gchar *path, GdkModifierType mods, guint code, gpointer data) {
-	// Actions* actions = (Actions*)data;
-	// guint key = XkbKeycodeToKeysym(actions->display(), code, 0, 0);
 	((Actions *)data)->on_accel_edited(path, code, mods);
 }
 
@@ -189,15 +189,15 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	button_add_group->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_group));
 	button_remove_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_app));
 	button_reset_actions->signal_clicked().connect([this]() {
-	std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			Gtk::TreeRow row(*tm->get_iter(*i));
-			action_list->reset(row[cols.id]);
-		}
-		update_action_list();
-		on_selection_changed();
-		update_actions();
-	});
+		std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
+			for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
+				Gtk::TreeRow row(*tm->get_iter(*i));
+				action_list->reset(row[cols.id]);
+			}
+			update_action_list();
+			on_selection_changed();
+			update_actions();
+		});
 	button_about->signal_clicked().connect([about_dialog](){ about_dialog->run(); });
 
 	tv.signal_row_activated().connect(sigc::mem_fun(*this, &Actions::on_row_activated));
@@ -273,11 +273,23 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 
 	apps_view->append_column_editable(_("Application"), ca.app);
 	apps_view->get_column(0)->set_expand(true);
-	apps_view->get_column(0)->set_cell_data_func(
-			*apps_view->get_column_cell_renderer(0), sigc::mem_fun(*this, &Actions::on_cell_data_apps));
+	apps_view->get_column(0)->set_cell_data_func(*apps_view->get_column_cell_renderer(0),
+		[this](Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter) {
+			ActionListDiff *as = (*iter)[ca.actions];
+			Gtk::CellRendererText *renderer = dynamic_cast<Gtk::CellRendererText *>(cell);
+			if (renderer)
+				renderer->property_editable().set_value(actions.get_root() != as && !as->app);
+		});
+			
 	Gtk::CellRendererText *app_name_renderer =
 		dynamic_cast<Gtk::CellRendererText *>(apps_view->get_column_cell_renderer(0));
-	app_name_renderer->signal_edited().connect(sigc::mem_fun(*this, &Actions::on_group_name_edited));
+	app_name_renderer->signal_edited().connect([this](const Glib::ustring& path, const Glib::ustring& new_text) {
+		Gtk::TreeRow row(*apps_model->get_iter(path));
+		row[ca.app] = new_text;
+		ActionListDiff *as = row[ca.actions];
+		as->name = new_text;
+		update_actions();
+	});
 	apps_view->append_column(_("Actions"), ca.count);
 
 	apps_view->set_model(apps_model);
@@ -402,16 +414,8 @@ static bool get_app_id_dialog(std::string& app_id, Gtk::Window& main_win) {
 	}
 }
 
-bool Actions::select_exclude_row(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, const std::string& name) {
-	if ((*iter)[exclude_cols.type] == name) {
-		exclude_tv->set_cursor(path);
-		return true;
-	}
-	return false;
-}
-
 void Actions::on_add_exclude() {
-	std::string name; // = grabber->select_window();
+	std::string name;
 	if (!get_app_id_dialog(name, *main_win)) return;
 	if (actions.add_exclude_app(name)) {
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
@@ -419,7 +423,13 @@ void Actions::on_add_exclude() {
 		Gtk::TreePath path = exclude_tm->get_path(row);
 		exclude_tv->set_cursor(path);
 	} else {
-		exclude_tm->foreach(sigc::bind(sigc::mem_fun(*this, &Actions::select_exclude_row), name));
+		exclude_tm->foreach([this, &name] (const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter) {
+			if ((*iter)[exclude_cols.type] == name) {
+				exclude_tv->set_cursor(path);
+				return true;
+			}
+			return false;
+		});
 	}
 }
 
@@ -752,29 +762,23 @@ void Actions::on_button_delete() {
 	update_counts();
 }
 
-void Actions::on_cell_data_apps(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter) {
-	ActionListDiff *as = (*iter)[ca.actions];
-	Gtk::CellRendererText *renderer = dynamic_cast<Gtk::CellRendererText *>(cell);
-	if (renderer)
-		renderer->property_editable().set_value(actions.get_root() != as && !as->app);
-}
-
-bool Actions::select_app(const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter, ActionListDiff *actions) {
-	if ((*iter)[ca.actions] == actions) {
-		apps_view->expand_to_path(path);
-		apps_view->set_cursor(path);
-		return true;
-	}
-	return false;
-}
-
 void Actions::on_add_app() {
 	std::string name;
 	if (!get_app_id_dialog(name, *main_win)) return;
-	if (actions.apps.count(name)) {
-		apps_model->foreach(sigc::bind(sigc::mem_fun(*this, &Actions::select_app), actions.apps[name]));
+	auto it = actions.apps.find(name);
+	if(it != actions.apps.end()) {
+		const ActionListDiff* actions = it->second;
+		apps_model->foreach([this, actions] (const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter) {
+			if ((*iter)[ca.actions] == actions) {
+				apps_view->expand_to_path(path);
+				apps_view->set_cursor(path);
+				return true;
+			}
+			return false;
+		});
 		return;
 	}
+	
 	ActionListDiff *parent = action_list->app ? actions.get_root() : action_list;
 	ActionListDiff *child = parent->add_child(name, true);
 	const Gtk::TreeNodeChildren &ch = parent == actions.get_root() ?
@@ -833,14 +837,6 @@ void Actions::on_add_group() {
 	Gtk::TreePath path = apps_model->get_path(row);
 	apps_view->expand_to_path(path);
 	apps_view->set_cursor(path, *apps_view->get_column(0), true);
-	update_actions();
-}
-
-void Actions::on_group_name_edited(const Glib::ustring& path, const Glib::ustring& new_text) {
-	Gtk::TreeRow row(*apps_model->get_iter(path));
-	row[ca.app] = new_text;
-	ActionListDiff *as = row[ca.actions];
-	as->name = new_text;
 	update_actions();
 }
 

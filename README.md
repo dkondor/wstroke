@@ -1,11 +1,11 @@
 # wstroke
 
-Experimental port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire).
+Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire). Mouse gestures are shapes drawn on the screen while holding down one of the buttons (typically the left or middle button). This plugin allows associating such gestures with various actions. See the [Wiki](https://github.com/dkondor/wstroke/wiki) for more explanations and examples.
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire).
- - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`
+ - [Wayfire](https://github.com/WayfireWM/wayfire) (a recent git version, at least commit [bc09c36](https://github.com/WayfireWM/wayfire/commit/bc09c36f92f9c1301cdcddff4a1bf7e64a703685).
+ - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - Potentially [wcm](https://github.com/WayfireWM/wcm) to easily enable
 

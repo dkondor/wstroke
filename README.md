@@ -1,13 +1,13 @@
 # wstroke
 
-Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire). Mouse gestures are shapes drawn on the screen while holding down one of the buttons (typically the left or middle button). This plugin allows associating such gestures with various actions. See the [Wiki](https://github.com/dkondor/wstroke/wiki) for more explanations and examples.
+Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire). Mouse gestures are shapes drawn on the screen while holding down one of the buttons (typically the right or middle button). This plugin allows associating such gestures with various actions. See the [Wiki](https://github.com/dkondor/wstroke/wiki) for more explanations and examples.
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) (a recent git version, at least commit [bc09c36](https://github.com/WayfireWM/wayfire/commit/bc09c36f92f9c1301cdcddff4a1bf7e64a703685).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) (a recent git version, at least commit [bc09c36](https://github.com/WayfireWM/wayfire/commit/bc09c36f92f9c1301cdcddff4a1bf7e64a703685)) and [wlroots](https://github.com/swaywm/wlroots/).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
- - Potentially [wcm](https://github.com/WayfireWM/wcm) to easily enable
+ - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
 
 ### Building and installing
 
@@ -41,7 +41,7 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
 ### What works
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
- - Drawing and recognizing stokes (will log output with matches).
+ - Drawing and recognizing stokes.
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
  - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly).
  - Generating keypresses ("Key" action).
@@ -60,4 +60,7 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  - Scroll action (removed from settings, will be converted to Global)
  - SendText action (removed from settings, will be converted to Global)
  - Ignore in combination with keyboard keypresses.
+ - Individual settings (which button, timeout) for each pointing device
+ - Advanced gestures
+ - Touchscreen and pen / stylus support
 

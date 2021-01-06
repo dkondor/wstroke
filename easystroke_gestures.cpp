@@ -620,7 +620,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		 * allocates the overlay texture if necessary and activates rendering */
 		void draw_line(int x1, int y1, int x2, int y2) {
 			if(!ensure_fb()) return;
-	
+			
 			wf::dimensions_t dim = output->get_screen_size();
 			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
 			
@@ -655,7 +655,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			auto out_fb = output->render->get_target_framebuffer();
 			auto geometry = output->get_relative_geometry();
 			auto ortho = out_fb.get_orthographic_projection();
-			auto damage = output->render->get_swap_damage() & geometry;
+			auto damage = output->render->get_scheduled_damage() & geometry;
 			
 			OpenGL::render_begin(out_fb);
 			for (auto& box : damage) {

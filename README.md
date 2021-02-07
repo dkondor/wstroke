@@ -4,7 +4,7 @@ Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) (a recent git version, at least commit [bc09c36](https://github.com/WayfireWM/wayfire/commit/bc09c36f92f9c1301cdcddff4a1bf7e64a703685)) and [wlroots](https://github.com/swaywm/wlroots/).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) ([0.7.0](https://github.com/WayfireWM/wayfire/releases/tag/v0.7.0) or a recent git version, at least commit [bc09c36](https://github.com/WayfireWM/wayfire/commit/bc09c36f92f9c1301cdcddff4a1bf7e64a703685)) and [wlroots](https://github.com/swaywm/wlroots/).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration

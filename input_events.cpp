@@ -107,7 +107,7 @@ void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyb
 	LOGD("Emitting keyboard event ", key, state == WL_KEYBOARD_KEY_STATE_PRESSED ? ", pressed" : ", released");
 	wlr_event_keyboard_key ev;
 	ev.keycode = key;
-	ev.state = state;
+	ev.state = (decltype(ev.state))state;
 	ev.update_state = true;
 	ev.time_msec = time_msec;
 	wl_signal_emit(&(input_keyboard->keyboard->events.key), &ev);

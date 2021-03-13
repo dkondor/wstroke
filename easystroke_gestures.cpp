@@ -386,7 +386,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 				initial_active_view = nullptr;
 			
-			mouse_view = wf::get_core().get_view_at(wf::pointf_t{(double)x, (double)y});
+			mouse_view = wf::get_core().get_cursor_focus_view();
 			if(mouse_view && mouse_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 				mouse_view = nullptr;
 			

@@ -275,14 +275,14 @@ public:
 class Global : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG }; /* TODO: add more, e.g. rotate cube? */
+	enum class Type { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG, OSWITCH, CUBE }; /* TODO: add more! */
 protected:
 	Type type;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Global(Type t): type(t) { }
 	Global(): type(Type::NONE) { }
 public:
-	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::SHOW_CONFIG) + 1;
+	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::CUBE) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "Global Action"; }

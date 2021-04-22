@@ -268,6 +268,12 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				case Global::Type::SCALE_ALL:
 					plugin_activator = "scale/toggle_all";
 					break;
+				case Global::Type::OSWITCH:
+					plugin_activator = "oswitch/next_output";
+					break;
+				case Global::Type::CUBE:
+					plugin_activator = "cube/activate";
+					break;
 				case Global::Type::SHOW_CONFIG:
 					wf::get_core().run("wstroke-config");
 					/* fallthrough */

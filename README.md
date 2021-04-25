@@ -8,6 +8,7 @@ Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
+ - Optionally [libinput](https://www.freedesktop.org/wiki/Software/libinput/) version [1.70](https://lists.freedesktop.org/archives/wayland-devel/2021-February/041733.html) or higher for improved touchpad support (to allow tap-and-drag for the right and middle buttons, required for drawing gestures without physical buttons)
 
 ### Building and installing
 

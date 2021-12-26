@@ -92,6 +92,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		 * action -- refocusing might be done by the action visitor or
 		 * the main function when ending the gesture */
 		bool needs_refocus = false;
+		bool needs_refocus2 = false; /* temporary copy of the above used by the idle callbacks */
 		
 		bool active = false;
 		bool is_gesture = false;
@@ -103,6 +104,20 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::wl_timer timeout;
 		
 		std::string config_dir;
+		
+		/* Handle views being unmapped -- needed to avoid segfault if the "target" views disappear */
+		wf::signal_connection_t view_unmapped{[this] (wf::signal_data_t *data) {
+			auto view = get_signaled_view(data);
+			if(view) {
+				if(target_view == view) target_view = nullptr;
+				if(initial_active_view == view) {
+					needs_refocus = false; /* "lost" the initially active view, avoid refocusing */
+					needs_refocus2 = false; /* "lost" the initially active view, avoid refocusing */
+					initial_active_view = nullptr;
+				}
+				if(mouse_view == view) mouse_view = nullptr;
+			}
+		} };
 		
 	public:
 		wstroke() {
@@ -147,6 +162,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 					else end_stroke();
 				}
 			};
+			grab_interface->callbacks.cancel = [this]() {
+				cancel_stroke();
+			};
 			output->add_button(initiate, &stroke_initiate);
 			wf::get_core().connect_signal("pointer_button_post", &ignore_button_cb);
 			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
@@ -179,9 +197,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		void visit(const SendKey* action) override {
 			uint32_t mod = action->get_mods();
 			uint32_t key = action->get_key();
-			bool needs_refocus_tmp = needs_refocus;
+			needs_refocus2 = needs_refocus;
 			if(key) {
-				idle_generate.run_once([this, mod, key, needs_refocus_tmp] () {
+				idle_generate.run_once([this, mod, key] () {
 					uint32_t t = wf::get_current_time();
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
 					if(mod) input.keyboard_mods(mod, 0, 0);
@@ -190,7 +208,8 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 					input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_RELEASED);
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					if(mod) input.keyboard_mods(0, 0, 0);
-					if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+					if(needs_refocus2) output->focus_view(initial_active_view, false);
+					view_unmapped.disconnect();
 				});
 				needs_refocus = false;
 			}
@@ -204,13 +223,14 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		void visit(const Ignore* action) override {
 			uint32_t ignore_mods = action->get_mods();
 			uint32_t new_ignore_mods = (ignore_mods ^ ignore_active) & ignore_mods;
-			bool needs_refocus_tmp = needs_refocus;
+			needs_refocus2 = needs_refocus;
 			if(new_ignore_mods || needs_refocus) {
-				idle_generate.run_once([this, new_ignore_mods, needs_refocus_tmp] () {
+				idle_generate.run_once([this, new_ignore_mods] () {
 					uint32_t t = wf::get_current_time();
 					keyboard_modifiers(t, new_ignore_mods, WL_KEYBOARD_KEY_STATE_PRESSED);
 					input.keyboard_mods(new_ignore_mods, 0, 0);
-					if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+					if(needs_refocus2) output->focus_view(initial_active_view, false);
+					view_unmapped.disconnect();
 				});
 				ignore_active |= ignore_mods;
 				needs_refocus = false;
@@ -236,9 +256,9 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 					return;
 			}
 			
-			bool needs_refocus_tmp = needs_refocus;
+			needs_refocus2 = needs_refocus;
 			
-			idle_generate.run_once([this, mod, btn, needs_refocus_tmp] () {
+			idle_generate.run_once([this, mod, btn] () {
 				uint32_t t = wf::get_current_time();
 				if(mod) {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
@@ -251,7 +271,8 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					input.keyboard_mods(0, 0, 0);
 				}
-				if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+				if(needs_refocus2) output->focus_view(initial_active_view, false);
+				view_unmapped.disconnect();
 			});
 			needs_refocus = false;
 		}
@@ -355,12 +376,13 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		 * that our grab interface does not get in the way; also take
 		 * care of refocusing the original view if needed */
 		void call_plugin(const std::string& plugin_activator) {
-			bool needs_refocus_tmp = needs_refocus;
-			idle_generate.run_once([this, needs_refocus_tmp, plugin_activator] () {
+			needs_refocus2 = needs_refocus;
+			idle_generate.run_once([this, plugin_activator] () {
 				wf::activator_data_t data;
 				data.source = wf::activator_source_t::PLUGIN;
 				output->call_plugin(plugin_activator, data);
-				if(needs_refocus_tmp) output->focus_view(initial_active_view, false);
+				if(needs_refocus2) output->focus_view(initial_active_view, false);
+				view_unmapped.disconnect();
 			});
 			needs_refocus = false;
 		}
@@ -396,7 +418,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				const std::string& app_id = target_view->get_app_id();
 				if(actions->exclude_app(app_id)) {
 					LOGD("Excluding strokes for app: ", app_id);
-					check_focus_mouse_view();
+					if(initial_active_view != mouse_view) check_focus_mouse_view();
 					return false;
 				}
 			}
@@ -406,9 +428,14 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				return false;
 			}
 			if(!grab_interface->grab()) {
+				output->deactivate_plugin(grab_interface);
 				LOGE("could not get grab");
 				return false;
 			}
+			
+			/* listen to views being unmapped to handle the case when
+			 * initial_active_view or mouse_view disappears while running */
+			output->connect_signal("view-unmapped", &view_unmapped);
 			
 			active = true;
 			uint32_t t = wf::get_current_time();
@@ -418,6 +445,11 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		
 		/* callback when the mouse is moved */
 		void handle_input_move(int32_t x, int32_t y) {
+			if(ps.size()) {
+				const auto& tmp = ps.back();
+				/* ignore events without actual movement */
+				if(x == tmp.x && y == tmp.y) return;
+			}
 			Triple t{(float)x, (float)y, wf::get_current_time()};
 			if(!is_gesture) {
 				float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
@@ -428,6 +460,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 						const std::string& mode = focus_mode;
 						if(mode == "always" || mode == "only_gesture") needs_refocus = false;
 						else needs_refocus = true;
+						needs_refocus2 = false; /* set this to false, will be set to true if needed later */
 						/* raise the view if it should stay focused after the gesture */
 						output->focus_view(target_view, !needs_refocus);
 					}
@@ -476,13 +509,19 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				}
 				else LOGD("Unmatched stroke");
 				if(needs_refocus) {
+					needs_refocus2 = needs_refocus;
 					idle_generate.run_once([this]() {
 						/* note: initial_active_view can be NULL -- in this
-						 * case, we just unfocus the view under the mouse */
-						output->focus_view(initial_active_view, false);
+						 * case, we just unfocus the view under the mouse;
+						 * note: needs_refocus2 can be set to false if
+						 * initial_active_view was unmapped before this
+						 * callback was run; in this case, we do nothing */
+						if(needs_refocus2) output->focus_view(initial_active_view, false);
+						view_unmapped.disconnect();
 					});
 					needs_refocus = false;
 				}
+				else if(!needs_refocus2) view_unmapped.disconnect();
 				is_gesture = false;
 				pointer_release_next = true;
 			}
@@ -505,6 +544,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
 					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
 					output->add_button(initiate, &stroke_initiate);
+					view_unmapped.disconnect();
 				});
 			}
 			ps.clear();
@@ -561,6 +601,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			ptr_moved = false;
 			is_gesture = false;
 			timeout.disconnect();
+			view_unmapped.disconnect();
 		}
 		
 		static constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> mod_map = {

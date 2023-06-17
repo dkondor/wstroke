@@ -1,7 +1,7 @@
 /*
  * input_events.hpp -- interface to generate input events in Wayfire
  * 
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -47,8 +47,8 @@ class input_headless {
 	protected:
 		void start_backend();
 		struct wlr_backend* headless_backend = nullptr;
-		struct wlr_input_device* input_pointer = nullptr;
-		struct wlr_input_device* input_keyboard = nullptr;
+		struct wlr_pointer* input_pointer = nullptr;
+		struct wlr_keyboard* input_keyboard = nullptr;
 };
 
 #endif

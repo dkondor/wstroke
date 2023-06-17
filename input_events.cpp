@@ -1,7 +1,7 @@
 /*
  * input_events.cpp -- interface to generate input events in Wayfire
  * 
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,16 +28,27 @@ extern "C" {
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 }
 
 #include <wayfire/util/log.hpp>
 #include <wayfire/core.hpp>
 
+static const struct wlr_pointer_impl ws_headless_pointer_impl = {
+	.name = "wstroke-pointer",
+};
+
+static const struct wlr_keyboard_impl ws_headless_keyboard_impl = {
+	.name = "wstroke-keyboard",
+	.led_update = nullptr
+};
+
+
 void input_headless::init() {
 	auto& core = wf::compositor_core_t::get();
-	/* 1. create backend */
-	headless_backend = wlr_headless_backend_create_with_renderer(core.display, core.renderer);
+	/* 1. create headless backend */
+	headless_backend = wlr_headless_backend_create(core.display);
 	if(!headless_backend) {
 		LOGE("Cannot create headless wlroots backend!");
 		return;
@@ -53,18 +64,25 @@ void input_headless::init() {
 	start_backend();
 	
 	/* 4. create the new input device */
-	input_pointer = wlr_headless_add_input_device(headless_backend, WLR_INPUT_DEVICE_POINTER);
+	input_pointer = (struct wlr_pointer*)calloc(1, sizeof(struct wlr_pointer));
 	if(!input_pointer) {
 		LOGE("Cannot create pointer device!");
 		fini();
 		return;
 	}
-	input_keyboard = wlr_headless_add_input_device(headless_backend, WLR_INPUT_DEVICE_KEYBOARD);
+	wlr_pointer_init(input_pointer, &ws_headless_pointer_impl, ws_headless_pointer_impl.name);
+	
+	
+	input_keyboard = (struct wlr_keyboard*)calloc(1, sizeof(struct wlr_keyboard));
 	if(!input_keyboard) {
 		LOGE("Cannot create keyboard device!");
 		fini();
 		return;
 	}
+	wlr_keyboard_init(input_keyboard, &ws_headless_keyboard_impl, ws_headless_keyboard_impl.name);
+	
+	wl_signal_emit_mutable(&headless_backend->events.new_input, input_keyboard);
+	wl_signal_emit_mutable(&headless_backend->events.new_input, input_pointer);
 }
 
 void input_headless::start_backend() {
@@ -91,12 +109,12 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
 		return;
 	}
 	LOGD("Emitting pointer button event");
-	wlr_event_pointer_button ev;
-    ev.device = input_pointer;
+	wlr_pointer_button_event ev;
+    // ev.device = input_pointer;
     ev.button = button;
     ev.state = state;
     ev.time_msec = time_msec;
-    wl_signal_emit(&(input_pointer->pointer->events.button), &ev);
+    wl_signal_emit(&(input_pointer->events.button), &ev);
 }
 
 void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state) {
@@ -105,12 +123,12 @@ void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyb
 		return;
 	}
 	LOGD("Emitting keyboard event ", key, state == WL_KEYBOARD_KEY_STATE_PRESSED ? ", pressed" : ", released");
-	wlr_event_keyboard_key ev;
+	wlr_keyboard_key_event ev;
 	ev.keycode = key;
 	ev.state = (decltype(ev.state))state;
 	ev.update_state = true;
 	ev.time_msec = time_msec;
-	wl_signal_emit(&(input_keyboard->keyboard->events.key), &ev);
+	wl_signal_emit(&(input_keyboard->events.key), &ev);
 }
 
 void input_headless::keyboard_mods(uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked) {
@@ -119,7 +137,7 @@ void input_headless::keyboard_mods(uint32_t mods_depressed, uint32_t mods_latche
 		return;
 	}
 	LOGD("Changing keyboard modifiers");
-	wlr_keyboard_notify_modifiers(input_keyboard->keyboard, mods_depressed, mods_latched, mods_locked, 0);
+	wlr_keyboard_notify_modifiers(input_keyboard, mods_depressed, mods_latched, mods_locked, 0);
 /*	struct wlr_seat* seat = wf::get_core().get_current_seat(); -- does not work: combining with the "real" keyboard
 	struct wlr_keyboard_modifiers modifiers;
 	modifiers.depressed = mods_depressed;

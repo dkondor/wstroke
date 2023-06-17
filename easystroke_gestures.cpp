@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,8 @@
 #include <wayfire/util/log.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/per-output-plugin.hpp>
+#include <wayfire/plugins/common/input-grab.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
@@ -67,7 +69,7 @@ void main()
 
 
 
-class wstroke : public wf::plugin_interface_t, ActionVisitor {
+class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {
 	protected:
 		wf::button_callback stroke_initiate;
 		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"wstroke/initiate"};
@@ -75,6 +77,13 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		wf::option_wrapper_t<std::string> focus_mode{"wstroke/focus_mode"};
 		wf::option_wrapper_t<int> start_timeout{"wstroke/start_timeout"};
 		wf::option_wrapper_t<int> end_timeout{"wstroke/end_timeout"};
+		
+		std::unique_ptr<wf::input_grab_t> input_grab;
+		wf::plugin_activation_data_t grab_interface{
+			.name = "wstroke",
+			.capabilities = wf::CAPABILITY_MANAGE_COMPOSITOR,
+			.cancel = [this]() { cancel_stroke(); }
+		};
 		
 		PreStroke ps;
 		std::unique_ptr<ActionDB> actions;
@@ -101,13 +110,13 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 		uint32_t ignore_active = 0;
 		
 		bool ptr_moved = false;
-		wf::wl_timer timeout;
+		wf::wl_timer<false> timeout;
 		
 		std::string config_dir;
 		
 		/* Handle views being unmapped -- needed to avoid segfault if the "target" views disappear */
-		wf::signal_connection_t view_unmapped{[this] (wf::signal_data_t *data) {
-			auto view = get_signaled_view(data);
+		wf::signal::connection_t<wf::view_unmapped_signal> view_unmapped = [=] (wf::view_unmapped_signal *ev) {
+			auto view = ev->view;
 			if(view) {
 				if(target_view == view) target_view = nullptr;
 				if(initial_active_view == view) {
@@ -117,7 +126,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				}
 				if(mouse_view == view) mouse_view = nullptr;
 			}
-		} };
+		};
 		
 	public:
 		wstroke() {
@@ -148,26 +157,16 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			color_program.set_simple(OpenGL::compile_program(
 				default_vertex_shader_source, color_rect_fragment_source));
 			OpenGL::render_end();
-			
-			grab_interface->name = "wstroke";
-			grab_interface->capabilities = wf::CAPABILITY_GRAB_INPUT;
-			grab_interface->callbacks.pointer.motion = [=](int32_t x, int32_t y) {
-				ptr_moved = true;
-				handle_input_move(x, y);
-			};
-			grab_interface->callbacks.pointer.button = [=](uint32_t button, uint32_t state) {
-				wf::buttonbinding_t tmp = initiate;
-				if(button == tmp.get_button() && state == WLR_BUTTON_RELEASED) {
-					if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); return false; });
-					else end_stroke();
-				}
-			};
+			/*
 			grab_interface->callbacks.cancel = [this]() {
 				cancel_stroke();
-			};
+			}; */
 			output->add_button(initiate, &stroke_initiate);
-			wf::get_core().connect_signal("pointer_button_post", &ignore_button_cb);
+			wf::get_core().connect(&ignore_button_cb);
 			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
+			
+			input_grab = std::make_unique<wf::input_grab_t>(this->grab_interface.name, output, nullptr, this, nullptr);
+			input_grab->set_wants_raw_input(true);
 		}
 		
 		void fini() override {
@@ -187,6 +186,21 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				inotify_fd = -1;
 			}
 		}
+		
+		/* pointer tracking interface */
+		void handle_pointer_button(const wlr_pointer_button_event& event) override {
+			wf::buttonbinding_t tmp = initiate;
+			if(event.button == tmp.get_button() && event.state == WLR_BUTTON_RELEASED) {
+				if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
+				else end_stroke();
+			}
+		}
+		
+		void handle_pointer_motion(wf::pointf_t pointer_position, uint32_t time_ms) override {
+			ptr_moved = true;
+			handle_input_move(pointer_position.x, pointer_position.y);
+		}
+		
 		
 		/* visitor interface for carrying out actions */
 		void visit(const Command* action) override {
@@ -379,7 +393,8 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			set_idle_action([this, plugin_activator] () {
 				wf::activator_data_t data;
 				data.source = wf::activator_source_t::PLUGIN;
-				output->call_plugin(plugin_activator, data);
+				LOGI("Call plugin: ", plugin_activator);
+				// output->call_plugin(plugin_activator, data); -- not working
 			});
 		}
 		
@@ -419,19 +434,15 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				}
 			}
 			
-			if(!output->activate_plugin(grab_interface,0)) {
+			if(!output->activate_plugin(&grab_interface, 0)) {
 				LOGE("could not activate");
 				return false;
 			}
-			if(!grab_interface->grab()) {
-				output->deactivate_plugin(grab_interface);
-				LOGE("could not get grab");
-				return false;
-			}
+			input_grab->grab_input(wf::scene::layer::OVERLAY);
 			
 			/* listen to views being unmapped to handle the case when
 			 * initial_active_view or mouse_view disappears while running */
-			output->connect_signal("view-unmapped", &view_unmapped);
+			output->connect(&view_unmapped);
 			
 			active = true;
 			uint32_t t = wf::get_current_time();
@@ -446,7 +457,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 				/* ignore events without actual movement */
 				if(x == tmp.x && y == tmp.y) return;
 			}
-			Triple t{(float)x, (float)y, wf::get_current_time()};
+			Triple t{(float)x, (float)y, (uint32_t)wf::get_current_time()};
 			if(!is_gesture) {
 				float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
 				if(dist > 16.0f) {
@@ -468,7 +479,7 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			if(timeout.is_connected()) {
 				timeout.disconnect();
 				int timeout_len = end_timeout > 0 ? end_timeout : start_timeout;
-				timeout.set_timeout(timeout_len, [this]() { end_stroke(); return false; });
+				timeout.set_timeout(timeout_len, [this]() { end_stroke(); });
 			}
 		}
 		
@@ -484,8 +495,8 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			timeout.disconnect();
 			ptr_moved = false;
 			clear_lines();
-			grab_interface->ungrab();
-			output->deactivate_plugin(grab_interface);
+			input_grab->ungrab_input();
+			output->deactivate_plugin(&grab_interface);
 			if(is_gesture) {
 				RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
 				/* try to match the stroke, write out match */
@@ -568,18 +579,18 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 			}
 		}}; */
 		
-		wf::signal_connection_t ignore_button_cb{[this] (wf::signal_data_t *data) {
-			auto k = static_cast<wf::input_event_signal<wlr_event_pointer_button>*>(data);
-			if(k->event->state == WLR_BUTTON_RELEASED) {
+		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>> ignore_button_cb =
+			[=] (wf::input_event_signal<wlr_pointer_button_event> *ev) {
+			if(ev->event->state == WLR_BUTTON_RELEASED) {
 				if(pointer_release_next) pointer_release_next = false;
 				else end_ignore();
 			}
-		}};
+		};
 		
 		/* callback to cancel a stroke */
 		void cancel_stroke() {
-			grab_interface->ungrab();
-			output->deactivate_plugin(grab_interface);
+			input_grab->ungrab_input();
+			output->deactivate_plugin(&grab_interface);
 			end_ignore();
 			ps.clear();
 			clear_lines();
@@ -715,5 +726,5 @@ class wstroke : public wf::plugin_interface_t, ActionVisitor {
 
 constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> wstroke::mod_map;
 
-DECLARE_WAYFIRE_PLUGIN(wstroke)
+DECLARE_WAYFIRE_PLUGIN(wf::per_output_plugin_t<wstroke>)
 

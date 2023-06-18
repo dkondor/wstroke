@@ -371,7 +371,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(inotify_fd >= 0) {
 				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
 				std::string config_file = config_dir + "actions-wstroke";
-				inotify_add_watch(inotify_fd, config_file.c_str(), IN_MODIFY);
+				inotify_add_watch(inotify_fd, config_file.c_str(), IN_CLOSE_WRITE);
 			}
 		}
 		

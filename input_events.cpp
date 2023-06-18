@@ -92,13 +92,21 @@ void input_headless::start_backend() {
 }
 
 void input_headless::fini() {
+	if(input_pointer) {
+		wlr_pointer_finish(input_pointer);
+		free(input_pointer);
+		input_pointer = nullptr;
+	}
+	if(input_keyboard) {
+		wlr_keyboard_finish(input_keyboard);
+		free(input_keyboard);
+		input_keyboard = nullptr;
+	}
 	if(headless_backend) {
 		auto& core = wf::compositor_core_t::get();
 		wlr_multi_backend_remove(core.backend, headless_backend);
 		wlr_backend_destroy(headless_backend);
 		headless_backend = nullptr;
-		input_pointer = nullptr;
-		input_keyboard = nullptr;
 	}
 }
 

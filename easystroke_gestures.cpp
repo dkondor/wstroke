@@ -23,6 +23,8 @@
 #include <wayfire/util/log.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/toplevel-view.hpp>
+#include <wayfire/window-manager.hpp>
 #include <wayfire/per-output-plugin.hpp>
 #include <wayfire/plugins/common/input-grab.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -301,29 +303,34 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* actions on the currently active view */
 		void visit(const View* action) override {
 			if(!target_view) return;
+			wayfire_toplevel_view toplevel = wf::toplevel_cast(target_view);
 			switch(action->get_action_type()) {
 				case View::Type::CLOSE:
 					target_view->close();
 					break;
 				case View::Type::MINIMIZE:
-					target_view->minimize_request(true);
+					if(toplevel) wf::get_core().default_wm->minimize_request(toplevel, true);
 					break;
 				case View::Type::MAXIMIZE:
 					/* toggle maximized state */
-					if(target_view->tiled_edges == wf::TILED_EDGES_ALL)
-						target_view->tile_request(0);
-					else target_view->tile_request(wf::TILED_EDGES_ALL);
+					if(toplevel) {
+						if(toplevel->pending_tiled_edges() == wf::TILED_EDGES_ALL)
+							 wf::get_core().default_wm->tile_request(toplevel, 0);
+						else wf::get_core().default_wm->tile_request(toplevel, wf::TILED_EDGES_ALL);
+					}
 					break;
 				case View::Type::MOVE:
-					target_view->move_request();
-					/* in this case we don't refocus the original view,
-					 * since the move plugin will raise the selected view,
-					 * so it would be confusing for it not to end up
-					 * focused as well */
-					needs_refocus = false;
+					if(toplevel) {
+						wf::get_core().default_wm->move_request(toplevel);
+						/* in this case we don't refocus the original view,
+						 * since the move plugin will raise the selected view,
+						 * so it would be confusing for it not to end up
+						 * focused as well */
+						needs_refocus = false;
+					}
 					break;
 				case View::Type::RESIZE:
-					target_view->resize_request(WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
 					break;
 				case View::Type::FULLSCREEN:
 					call_plugin("wm-actions/toggle_fullscreen");

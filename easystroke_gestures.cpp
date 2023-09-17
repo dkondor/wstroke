@@ -27,6 +27,9 @@
 #include <wayfire/window-manager.hpp>
 #include <wayfire/per-output-plugin.hpp>
 #include <wayfire/plugins/common/input-grab.hpp>
+#include <wayfire/plugins/common/shared-core-data.hpp>
+#include <wayfire/plugins/ipc/ipc-method-repository.hpp>
+#include <nlohmann/json.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
@@ -398,10 +401,12 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		 * care of refocusing the original view if needed */
 		void call_plugin(const std::string& plugin_activator) {
 			set_idle_action([this, plugin_activator] () {
-				wf::activator_data_t data;
-				data.source = wf::activator_source_t::PLUGIN;
 				LOGI("Call plugin: ", plugin_activator);
-				// output->call_plugin(plugin_activator, data); -- not working
+				
+				nlohmann::json data;
+				data["output_id"] = output->get_id();
+				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;
+				repo->call_method(plugin_activator, data);
 			});
 		}
 		

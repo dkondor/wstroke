@@ -6,9 +6,10 @@ Note: this branch requires a recent version of Wayfire and wlroots (see below). 
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) a recent git version, at least commit [3cca6c9](https://github.com/WayfireWM/wayfire/commit/3cca6c9fee35ea8671da2b1c3f56ca61045ea693)) and [wlroots](https://github.com/swaywm/wlroots/) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) a recent git version from the 0.8.0 branch, at least commit [48c3048](https://github.com/WayfireWM/wayfire/pull/1864/commits/48c30481afe47c8235885d2a2c7378091e6293f2)) and [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
+ - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
  - Optionally [libinput](https://www.freedesktop.org/wiki/Software/libinput/) version [1.70](https://lists.freedesktop.org/archives/wayland-devel/2021-February/041733.html) or higher for improved touchpad support (to allow tap-and-drag for the right and middle buttons, required for drawing gestures without physical buttons)
 
@@ -46,6 +47,7 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing stokes.
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
+ - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly), only supported for some plugins, see [here](https://github.com/WayfireWM/wayfire/issues/1811).
  - Generating keypresses ("Key" action).
  - Generating mouse clicks ("Button" action).
  - Generating modifiers ("Ignore" action -- only works in combination with mouse clicks, not the keyboard).
@@ -64,6 +66,5 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  - Ignore in combination with keyboard keypresses.
  - Individual settings (which button, timeout) for each pointing device
  - Advanced gestures
- - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly), see [here](https://github.com/WayfireWM/wayfire/issues/1811).
  - Touchscreen and pen / stylus support
 

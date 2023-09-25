@@ -192,16 +192,15 @@ class ws_node : public wf::scene::node_t {
 void ws_render_instance::render(const wf::render_target_t& target, const wf::region_t& region) {
 	if(this->self->fb.tex == (GLuint)-1) return;
 	auto geometry = this->self->output->get_relative_geometry();
-	auto ortho = target.get_orthographic_projection(); //!! TODO: this might not be needed !!
 	
 	OpenGL::render_begin(target);
 	for (auto& box : region) {
 		target.logic_scissor(wlr_box_from_pixman_box(box));
-		OpenGL::render_transformed_texture(this->self->fb.tex, geometry, ortho);
+		OpenGL::render_texture(this->self->fb.tex, target, geometry);
 	}
 	OpenGL::render_end();
 }
-		
+
 
 
 class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {

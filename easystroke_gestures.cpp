@@ -17,6 +17,8 @@
 #include <wayfire/plugin.hpp>
 #include <wayfire/output.hpp>
 #include <wayfire/render-manager.hpp>
+#include <wayfire/scene.hpp>
+#include <wayfire/scene-render.hpp>
 #include <wayfire/core.hpp>
 #include <wayfire/signal-definitions.hpp>
 #include <wayfire/util.hpp>
@@ -72,6 +74,134 @@ void main()
 	gl_FragColor = color;
 })";
 
+class ws_node;
+
+
+class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node> {
+	public:
+		/* render the current content of the overlay texture */
+		void render(const wf::render_target_t& target, const wf::region_t& region) override;
+		
+		ws_render_instance(ws_node *self, wf::scene::damage_callback push_damage, wf::output_t *output) :
+			wf::scene::simple_render_instance_t<ws_node>(self, push_damage, output) { }
+};
+
+
+/* node to draw lines on the screen, a simplified version of annotate */
+class ws_node : public wf::scene::node_t {
+	public:
+		wf::output_t* const output;
+		/* current annotation to be rendered -- store it in a framebuffer */
+		wf::framebuffer_t fb;
+		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
+		// wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
+		OpenGL::program_t color_program;
+		
+		ws_node(wf::output_t* output_) : node_t(false), output(output_) {
+			/* copied from opengl.cpp */
+			OpenGL::render_begin();
+			color_program.set_simple(OpenGL::compile_program(
+				default_vertex_shader_source, color_rect_fragment_source));
+			OpenGL::render_end();
+		}
+				
+		/* allocate frambuffer for storing the drawings if it
+		 * has not been allocated yet, according to the current
+		 * output size */
+		bool ensure_fb() {
+			bool ret = true;
+			if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
+				auto dim = output->get_screen_size();
+				OpenGL::render_begin();
+				ret = fb.allocate(dim.width, dim.height);
+				if(ret) {
+					fb.bind(); // bind buffer to clear it
+					OpenGL::clear({0, 0, 0, 0});
+				}
+				OpenGL::render_end();
+			}
+			return ret;
+		}
+		
+		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
+			damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
+			damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
+			damageRect.width += std::ceil(stroke_width + 1);
+			damageRect.height += std::ceil(stroke_width + 1);
+		}
+
+		/* draw a line into the overlay texture between the given points;
+		 * allocates the overlay texture if necessary and activates rendering */
+		void draw_line(int x1, int y1, int x2, int y2) {
+			if(!ensure_fb()) return;
+			
+			const int stroke_width = 2; //!! TODO: this should be an option !!
+			wf::dimensions_t dim = output->get_screen_size();
+			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
+			
+			OpenGL::render_begin(fb);
+			GL_CALL(glLineWidth((float)stroke_width));
+			GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
+			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
+			OpenGL::render_end();
+			
+			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
+			pad_damage_rect(d, stroke_width);
+			wf::scene::node_damage_signal ev;
+			ev.region = d; /* note: implicit conversion to wf::region_t */
+			this->emit(&ev);
+		}
+		
+		/* clear everything rendered by this plugin and deallocate the framebuffer */
+		void clear_lines() {
+			fb.release();
+			output->render->damage_whole();
+		}
+		
+		/* render a sequence of vertices, using the given color 
+		 * should only be called between OpenGL::render_begin() and
+		 * OpenGL::render_end() */
+		void render_vertices(GLfloat* vertexData, GLsizei nvertices,
+			wf::color_t color, GLenum mode, glm::mat4 matrix)
+		{
+			color_program.use(wf::TEXTURE_TYPE_RGBA);
+			
+			color_program.attrib_pointer("position", 2, 0, vertexData);
+			color_program.uniformMatrix4f("MVP", matrix);
+			color_program.uniform4f("color", {color.r, color.g, color.b, color.a});
+
+			GL_CALL(glEnable(GL_BLEND));
+			GL_CALL(glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
+			GL_CALL(glDrawArrays(mode, 0, nvertices));
+
+			color_program.deactivate();
+		}
+		
+		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
+				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
+			if(shown_on == output) instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+		}
+		
+		wf::geometry_t get_bounding_box() override {
+			wf::dimensions_t dim = output->get_screen_size();
+			return {0, 0, dim.width, dim.height};
+		}
+};
+
+
+void ws_render_instance::render(const wf::render_target_t& target, const wf::region_t& region) {
+	if(this->self->fb.tex == (GLuint)-1) return;
+	auto geometry = this->self->output->get_relative_geometry();
+	auto ortho = target.get_orthographic_projection(); //!! TODO: this might not be needed !!
+	
+	OpenGL::render_begin(target);
+	for (auto& box : region) {
+		target.logic_scissor(wlr_box_from_pixman_box(box));
+		OpenGL::render_transformed_texture(this->self->fb.tex, geometry, ortho);
+	}
+	OpenGL::render_end();
+}
+		
 
 
 class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {
@@ -109,7 +239,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		bool needs_refocus2 = false; /* temporary copy of the above used by the idle callbacks */
 		
 		bool active = false;
-		bool is_gesture = false;
+		bool is_gesture = false; /* whether currently processing a gesture */
 		bool pointer_release_next = false; /* set to true at the end of a gesture */
 		/* currentl modifier keys help by the ignore action */
 		uint32_t ignore_active = 0;
@@ -132,6 +262,10 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				if(mouse_view == view) mouse_view = nullptr;
 			}
 		};
+		
+		/* scenegraph node for drawing an overlay -- it is active
+		 * (i.e. added to the scenegraph) iff. is_gesture == true */
+		std::shared_ptr<ws_node> overlay_node;
 		
 	public:
 		wstroke() {
@@ -157,15 +291,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				input.init();
 			});
 			
-			/* copied from opengl.cpp */
-			OpenGL::render_begin();
-			color_program.set_simple(OpenGL::compile_program(
-				default_vertex_shader_source, color_rect_fragment_source));
-			OpenGL::render_end();
-			/*
-			grab_interface->callbacks.cancel = [this]() {
-				cancel_stroke();
-			}; */
+			overlay_node = std::make_shared<ws_node>(output);
+			
 			output->add_button(initiate, &stroke_initiate);
 			wf::get_core().connect(&ignore_button_cb);
 			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
@@ -180,7 +307,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			// ignore_key_cb.disconnect();
 			output->rem_binding(&stroke_initiate);
 			input.fini();
-			color_program.free_resources();
+			overlay_node = nullptr;
 			actions.reset();
 			if(inotify_source) {
 				wl_event_source_remove(inotify_source);
@@ -486,7 +613,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				}
 			}
 			ps.add(t);
-			if(is_gesture) draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
+			if(is_gesture) overlay_node->draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
 				ps.back().x, ps.back().y);
 			if(timeout.is_connected()) {
 				timeout.disconnect();
@@ -497,8 +624,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		/* start drawing the stroke on the screen */
 		void start_drawing() {
+			wf::scene::add_front(output->node_for_layer(wf::scene::layer::OVERLAY), overlay_node);
 			for(size_t i = 1; i < ps.size(); i++)
-				draw_line(ps[i-1].x, ps[i-1].y, ps[i].x, ps[i].y);
+				overlay_node->draw_line(ps[i-1].x, ps[i-1].y, ps[i].x, ps[i].y);
 		}
 		
 		/* callback when the mouse button is released */
@@ -506,10 +634,11 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(!active) return; /* in case the timeout was not disconnected */
 			timeout.disconnect();
 			ptr_moved = false;
-			clear_lines();
 			input_grab->ungrab_input();
 			output->deactivate_plugin(&grab_interface);
 			if(is_gesture) {
+				overlay_node->clear_lines();
+				wf::scene::remove_child(overlay_node);
 				RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
 				/* try to match the stroke, write out match */
 				const ActionListDiff* matcher = nullptr;
@@ -605,11 +734,14 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			output->deactivate_plugin(&grab_interface);
 			end_ignore();
 			ps.clear();
-			clear_lines();
+			if(is_gesture) {
+				overlay_node->clear_lines();
+				wf::scene::remove_child(overlay_node);
+				is_gesture = false;
+			}
 			if(target_mouse) output->focus_view(initial_active_view, false);
 			active = false;
 			ptr_moved = false;
-			is_gesture = false;
 			timeout.disconnect();
 			view_unmapped.disconnect();
 		}
@@ -624,115 +756,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		void keyboard_modifiers(uint32_t t, uint32_t mod, enum wl_keyboard_key_state state) {
 			for(const auto& x : mod_map) 
 				if(x.first & mod) input.keyboard_key(t, x.second, state);
-		}
-	
-	/*****************************************************************
-	 * Annotate-like functionality to draw the strokes on the screen *
-	 * This could be replaced by a dependence on an external plugin  *
-	 *****************************************************************/
-	
-		/* draw lines on the screen, a simplified version of annotate */
-		/* current annotation to be rendered -- store it in a framebuffer */
-		wf::framebuffer_t fb;
-		/* render function */
-		wf::effect_hook_t render_hook = [=] () { render(); };
-		/* flag to indicate if render_hook is active */
-		bool render_active = false;
-		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
-		OpenGL::program_t color_program;
-		
-		
-		/* allocate frambuffer for storing the drawings if it
-		 * has not been allocated yet
-		 * TODO: track changes in screen size! */
-		bool ensure_fb() {
-			bool ret = true;
-			if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
-				auto dim = output->get_screen_size();
-				OpenGL::render_begin();
-				ret = fb.allocate(dim.width, dim.height);
-				if(ret) {
-					fb.bind(); // bind buffer to clear it
-					OpenGL::clear({0, 0, 0, 0});
-				}
-				OpenGL::render_end();
-			}
-			return ret;
-		}
-		
-		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
-			damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
-			damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
-			damageRect.width += std::ceil(stroke_width + 1);
-			damageRect.height += std::ceil(stroke_width + 1);
-		}
-
-		/* draw a line into the overlay texture between the given points;
-		 * allocates the overlay texture if necessary and activates rendering */
-		void draw_line(int x1, int y1, int x2, int y2) {
-			if(!ensure_fb()) return;
-			
-			wf::dimensions_t dim = output->get_screen_size();
-			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
-			
-			float stroke_width = 2.0;
-			OpenGL::render_begin(fb);
-			GL_CALL(glLineWidth(stroke_width));
-			/* GL_CALL(glEnable(GL_LINE_SMOOTH)); -- TODO: antialiasing! */
-			GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
-			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
-			OpenGL::render_end();
-			
-			if(!render_active) output->render->add_effect(&render_hook, wf::OUTPUT_EFFECT_OVERLAY);
-			render_active = true;
-			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
-			pad_damage_rect(d, stroke_width);
-			output->render->damage(d);
-		}
-		
-		/* clear everything rendered by this plugin and deactivate rendering */
-		void clear_lines() {
-			if(render_active) {
-				output->render->rem_effect(&render_hook);
-				fb.release();
-				output->render->damage_whole();
-				render_active = false;
-			}
-		}
-		
-		/* render the current content of the overlay texture */
-		void render() {
-			if(fb.tex == (GLuint)-1) return;
-			auto out_fb = output->render->get_target_framebuffer();
-			auto geometry = output->get_relative_geometry();
-			auto ortho = out_fb.get_orthographic_projection();
-			auto damage = output->render->get_scheduled_damage() & geometry;
-			
-			OpenGL::render_begin(out_fb);
-			for (auto& box : damage) {
-				out_fb.logic_scissor(wlr_box_from_pixman_box(box));
-				OpenGL::render_transformed_texture(fb.tex, geometry, ortho);
-			}
-			OpenGL::render_end();
-		}
-		
-		/* render a sequence of vertices, using the given color 
-		 * should only be called between OpenGL::render_begin() and
-		 * OpenGL::render_end() */
-		void render_vertices(GLfloat* vertexData, GLsizei nvertices,
-			wf::color_t color, GLenum mode, glm::mat4 matrix)
-		{
-			color_program.use(wf::TEXTURE_TYPE_RGBA);
-			
-			color_program.attrib_pointer("position", 2, 0, vertexData);
-			color_program.uniformMatrix4f("MVP", matrix);
-			color_program.uniform4f("color", {color.r, color.g, color.b, color.a});
-
-			GL_CALL(glEnable(GL_BLEND));
-			GL_CALL(glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
-			GL_CALL(glDrawArrays(mode, 0, nvertices));
-
-			color_program.deactivate();
 		}
 };
 

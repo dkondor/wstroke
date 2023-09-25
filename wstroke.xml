@@ -6,13 +6,19 @@
 		<category>Accessibility</category>
 		<option name="initiate" type="button">
 			<_short>Activate</_short>
-			<_long>Start drawing a gesture.</_long>
+			<_long>Mouse button to press for drawing a gesture.</_long>
 			<default>BTN_RIGHT</default>
 		</option>
 		<option name="stroke_color" type="color">
 			<_short>Line color</_short>
 			<_long>Sets the line color for the strokes drawn.</_long>
 			<default>0.7 0.1 0.1 1.0</default>
+		</option>
+		<option name="stroke_width" type="int">
+			<_short>Line width</_short>
+			<_long>Sets the line width for drawing strokes (in pixels).</_long>
+			<default>2</default>
+			<min>0</min>
 		</option>
 		<option name="target_view_mouse" type="bool">
 			<_short>Target the view under the mouse</_short>

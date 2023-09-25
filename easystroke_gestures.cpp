@@ -94,7 +94,7 @@ class ws_node : public wf::scene::node_t {
 		/* current annotation to be rendered -- store it in a framebuffer */
 		wf::framebuffer_t fb;
 		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
-		// wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
+		wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
 		OpenGL::program_t color_program;
 		
 		ws_node(wf::output_t* output_) : node_t(false), output(output_) {
@@ -133,9 +133,9 @@ class ws_node : public wf::scene::node_t {
 		/* draw a line into the overlay texture between the given points;
 		 * allocates the overlay texture if necessary and activates rendering */
 		void draw_line(int x1, int y1, int x2, int y2) {
+			if(stroke_width == 0) return;
 			if(!ensure_fb()) return;
 			
-			const int stroke_width = 2; //!! TODO: this should be an option !!
 			wf::dimensions_t dim = output->get_screen_size();
 			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
 			

@@ -481,7 +481,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			needs_refocus2 = needs_refocus;
 			idle_generate.run_once([this, cb] () {
 				cb();
-				if(needs_refocus2) output->focus_view(initial_active_view, false);
+				if(needs_refocus2) wf::get_core().seat->focus_view(initial_active_view);
 				view_unmapped.disconnect();
 			});
 			needs_refocus = false;
@@ -541,7 +541,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(mouse_view) {
 				const std::string& mode = focus_mode;
 				if(mode == "no_gesture" || mode == "always")
-					output->focus_view(mouse_view, true);
+					wf::get_core().default_wm->focus_raise_view(mouse_view);
 			}
 		}
 		
@@ -553,7 +553,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				return false;
 			}
 			
-			initial_active_view = output->get_active_view();
+			initial_active_view = wf::get_core().seat->get_active_view();
 			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
 				initial_active_view = nullptr;
 			
@@ -607,7 +607,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 						else needs_refocus = true;
 						needs_refocus2 = false; /* set this to false, will be set to true if needed later */
 						/* raise the view if it should stay focused after the gesture */
-						output->focus_view(target_view, !needs_refocus);
+						if(needs_refocus) wf::get_core().seat->focus_view(target_view);
+						else wf::get_core().default_wm->focus_raise_view(target_view);
 					}
 				}
 			}
@@ -738,7 +739,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				wf::scene::remove_child(overlay_node);
 				is_gesture = false;
 			}
-			if(target_mouse) output->focus_view(initial_active_view, false);
+			if(target_mouse) wf::get_core().seat->focus_view(initial_active_view);
 			active = false;
 			ptr_moved = false;
 			timeout.disconnect();

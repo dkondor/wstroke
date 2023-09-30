@@ -6,7 +6,8 @@ Note: this branch requires a recent version of Wayfire and wlroots (see below). 
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) a recent git version from the 0.8.0 branch, at least commit [48c3048](https://github.com/WayfireWM/wayfire/pull/1864/commits/48c30481afe47c8235885d2a2c7378091e6293f2)) and [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) a recent git version from the 0.8.0 branch, at least commit [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337) (see below for compiling for older Wayfire versions)
+ - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
@@ -20,6 +21,14 @@ meson build
 ninja -C build
 sudo ninja -C build install
 ```
+
+If you get build errors, your Wayfire version might be too old (or too new). For older Wayfire versions, try the following:
+ - For version 0.7.0, use the [wayfire-0.7 branch](https://github.com/dkondor/wstroke/tree/wayfire-0.7) (run `git checkout wayfire-0.7` before building).
+ - For older Wayfire versions of the 0.8.0 series (between commits [3cca6c9](https://github.com/WayfireWM/wayfire/commit/3cca6c9fee35ea8671da2b1c3f56ca61045ea693) and [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889)), use [this state](https://github.com/dkondor/wstroke/tree/4f2e8f00e4c734ac6fc3698bc4cfc504fe47a311) (run `git checkout 4f2e8f0` before building).
+ - For moderately old versions of Wayfire (between commits [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889) and
+ [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337)), use [this state](https://github.com/dkondor/wstroke/tree/0401b4f608c7d265a10fa2e7f4ce2dafb9caca4b)  (run `git checkout 0401b4f` before building).
+ - For recent versions of Wayfire, use this branch (and report issues for build failures).
+
 
 ### Running
 

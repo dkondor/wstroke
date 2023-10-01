@@ -465,7 +465,16 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
 					break;
 				case View::Type::FULLSCREEN:
-					call_plugin("wm-actions/toggle_fullscreen");
+					if(toplevel) call_plugin_for_view("wm-actions/set-fullscreen", !toplevel->toplevel()->current().fullscreen);
+					break;
+				case View::Type::SEND_TO_BACK:
+					call_plugin_for_view("wm-actions/send-to-back", false); // note: state does not matter
+					break;
+				case View::Type::ALWAYS_ON_TOP:
+					call_plugin_for_view("wm-actions/set-always-on-top", !target_view->has_data("wm-actions-above"));
+					break;
+				case View::Type::STICKY:
+					if(toplevel) call_plugin_for_view("wm-actions/set-sticky", !toplevel->sticky);
 					break;
 				default:
 					break;
@@ -534,6 +543,20 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				
 				nlohmann::json data;
 				data["output_id"] = output->get_id();
+				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;
+				repo->call_method(plugin_activator, data);
+			});
+		}
+		
+		void call_plugin_for_view(const std::string& plugin_activator, bool state) {
+			uint32_t view_id = target_view->get_id();
+			set_idle_action([this, plugin_activator, view_id, state] () {
+				LOGI("Call plugin: ", plugin_activator);
+				
+				nlohmann::json data;
+				data["output_id"] = output->get_id();
+				data["view_id"] = view_id;
+				data["state"] = state;
 				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;
 				repo->call_method(plugin_activator, data);
 			});

@@ -297,7 +297,7 @@ public:
 class View : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type : uint32_t { NONE, CLOSE, MAXIMIZE, MOVE, RESIZE, MINIMIZE, FULLSCREEN }; /* TODO: add more, e.g. always on top */
+	enum class Type : uint32_t { NONE, CLOSE, MAXIMIZE, MOVE, RESIZE, MINIMIZE, FULLSCREEN, SEND_TO_BACK, ALWAYS_ON_TOP, STICKY };
 protected:
 	Type type;
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
@@ -306,7 +306,7 @@ protected:
 	View(Type t): type(t) { }
 	View(): type(Type::NONE) { }
 public:
-	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::FULLSCREEN) + 1;
+	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::STICKY) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "View Action"; }

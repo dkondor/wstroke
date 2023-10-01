@@ -1353,7 +1353,8 @@ const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_
 
 const char* Global::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 
-const char* View::types[View::n_actions] = { N_("None"), N_("Close"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize"), N_("Toggle fullscreen") };
+const char* View::types[View::n_actions] = { N_("None"), N_("Close"), N_("Toggle maximized"), N_("Move"), N_("Resize"), N_("Minimize"),
+	N_("Toggle fullscreen"), N_("Send to back"), N_("Toggle always on top"), N_("Toggle sticky") };
 
 const char* View::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 

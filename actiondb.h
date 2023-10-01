@@ -275,7 +275,7 @@ public:
 class Global : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type : uint32_t { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG };
+	enum class Type : uint32_t { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG, SHOW_DESKTOP };
 protected:
 	Type type;
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
@@ -284,7 +284,7 @@ protected:
 	Global(Type t): type(t) { }
 	Global(): type(Type::NONE) { }
 public:
-	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::SHOW_CONFIG) + 1;
+	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::SHOW_DESKTOP) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "Global Action"; }

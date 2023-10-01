@@ -421,6 +421,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				case Global::Type::SCALE_ALL:
 					plugin_activator = "scale/toggle_all";
 					break;
+				case Global::Type::SHOW_DESKTOP:
+					plugin_activator = "wm-actions/toggle_showdesktop";
+					break;
 				case Global::Type::SHOW_CONFIG:
 					wf::get_core().run("wstroke-config");
 					/* fallthrough */

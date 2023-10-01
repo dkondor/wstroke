@@ -1348,7 +1348,8 @@ ButtonInfo Button::get_button_info() const {
 	return bi;
 }
 
-const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"), N_("Configure gestures") };
+const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"),
+	N_("Configure gestures"), N_("Toggle show desktop") };
 
 const char* Global::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 

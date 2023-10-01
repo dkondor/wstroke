@@ -149,12 +149,26 @@ RAction Misc::convert() const {
 	}
 }
 
-template<class Archive> void Global::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+template<class Archive> void Global::load(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & type;
+	/* allow later extensions to add more types that might not be supported in older versions */
+	if((uint32_t)type >= n_actions) type = Type::NONE;
+}
+
+template<class Archive> void Global::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
 	ar & boost::serialization::base_object<Action>(*this);
 	ar & type;
 }
 
-template<class Archive> void View::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+template<class Archive> void View::load(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<Action>(*this);
+	ar & type;
+	/* allow later extensions to add more types that might not be supported in older versions */
+	if((uint32_t)type >= n_actions) type = Type::NONE;
+}
+
+template<class Archive> void View::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
 	ar & boost::serialization::base_object<Action>(*this);
 	ar & type;
 }

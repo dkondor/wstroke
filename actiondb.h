@@ -275,14 +275,16 @@ public:
 class Global : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG }; /* TODO: add more, e.g. rotate cube? */
+	enum class Type : uint32_t { NONE, EXPO, SCALE, SCALE_ALL, SHOW_CONFIG };
 protected:
 	Type type;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
+	template<class Archive> void load(Archive & ar, const unsigned int version);
+	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	Global(Type t): type(t) { }
 	Global(): type(Type::NONE) { }
 public:
-	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::SHOW_CONFIG) + 1;
+	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::SHOW_CONFIG) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "Global Action"; }
@@ -295,14 +297,16 @@ public:
 class View : public Action {
 	friend class boost::serialization::access;
 public:
-	enum class Type { NONE, CLOSE, MAXIMIZE, MOVE, RESIZE, MINIMIZE, FULLSCREEN }; /* TODO: add more, e.g. always on top */
+	enum class Type : uint32_t { NONE, CLOSE, MAXIMIZE, MOVE, RESIZE, MINIMIZE, FULLSCREEN }; /* TODO: add more, e.g. always on top */
 protected:
 	Type type;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
+	template<class Archive> void load(Archive & ar, const unsigned int version);
+	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	View(Type t): type(t) { }
 	View(): type(Type::NONE) { }
 public:
-	static constexpr unsigned int n_actions = static_cast<unsigned int>(Type::FULLSCREEN) + 1;
+	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::FULLSCREEN) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "View Action"; }

@@ -329,7 +329,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		void handle_pointer_motion(wf::pointf_t pointer_position, uint32_t time_ms) override {
 			ptr_moved = true;
-			handle_input_move(pointer_position.x, pointer_position.y);
+			auto geom = output->get_layout_geometry();
+			handle_input_move(pointer_position.x - geom.x, pointer_position.y - geom.y);
 		}
 		
 		

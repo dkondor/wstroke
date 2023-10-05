@@ -1,7 +1,7 @@
 /*
  * main.cc
  * 
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2020-2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,6 +30,7 @@
 #include "ecres.h"
 #include "convert_keycodes.h"
 #include "input_inhibitor.h"
+#include "config.h"
 
 static void error_dialog(const Glib::ustring &text) {
 	Gtk::MessageDialog dialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
@@ -42,7 +43,7 @@ int main(int argc, char **argv)
 {
 	char* xdg_config = getenv("XDG_CONFIG_HOME");
 	std::string home_dir = getenv("HOME");
-	std::string old_config_dir = home_dir + "/.easystroke/";
+	std::string old_config_dir = home_dir + "/.easystroke";
 	std::string config_dir = xdg_config ? std::string(xdg_config) + "/wstroke" :
 		home_dir + "/.config/wstroke";
 	
@@ -72,7 +73,6 @@ int main(int argc, char **argv)
 			return 1;
 		}
 	}
-	config_dir += '/';
 	
 	ActionDB actions_db;
 	bool config_read;
@@ -80,12 +80,28 @@ int main(int argc, char **argv)
 		config_read = actions_db.read(config_dir);
 	}
 	catch(std::exception& e) {
+		fprintf(stderr, "%s\n", e.what());
 		config_read = false;
 	}
 	if(!config_read) {
-		KeyCodes::keycode_errors = 0;
-		try { actions_db.read(old_config_dir); }
-		catch(std::exception& e) { }
+		if(std::filesystem::exists(old_config_dir, ec) && std::filesystem::is_directory(old_config_dir, ec)) {
+			KeyCodes::keycode_errors = 0;
+			try {
+				config_read = actions_db.read(old_config_dir);
+			}
+			catch(std::exception& e) {
+				fprintf(stderr, "%s\n", e.what());
+				config_read = false;
+			}
+		}
+		if(!config_read) {
+			try {
+				config_read = actions_db.read(DATA_DIR);
+			}
+			catch(std::exception& e) {
+				fprintf(stderr, "%s\n", e.what());
+			}
+		}
 	}
 	if(KeyCodes::keycode_errors) error_dialog(_("Could not convert some keycodes. "
 				"Some Key actions have missing values"));

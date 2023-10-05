@@ -259,7 +259,7 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 static char const * const actions_versions[] = { "-wstroke", "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
 
 bool ActionDB::read(const std::string& config_dir) {
-	std::string filename = config_dir+"actions";
+	std::string filename = config_dir+"/actions";
 	for (const char * const *v = actions_versions; *v; v++) {
 		if (std::filesystem::exists(filename + *v)) {
 			filename += *v;
@@ -278,7 +278,7 @@ bool ActionDB::read(const std::string& config_dir) {
 
 
 void ActionDB::write(const std::string& config_dir) {
-	std::string filename = config_dir+"actions"+actions_versions[0];
+	std::string filename = config_dir+"/actions"+actions_versions[0];
 	std::string tmp = filename + ".tmp";
 	std::ofstream ofs(tmp.c_str());
 	boost::archive::text_oarchive oa(ofs);

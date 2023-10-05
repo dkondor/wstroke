@@ -211,6 +211,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		wf::option_wrapper_t<std::string> focus_mode{"wstroke/focus_mode"};
 		wf::option_wrapper_t<int> start_timeout{"wstroke/start_timeout"};
 		wf::option_wrapper_t<int> end_timeout{"wstroke/end_timeout"};
+		wf::option_wrapper_t<std::string> resize_edges{"wstroke/resize_edges"};
 		
 		std::unique_ptr<wf::input_grab_t> input_grab;
 		wf::plugin_activation_data_t grab_interface{
@@ -463,19 +464,19 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					}
 					break;
 				case View::Type::RESIZE:
-					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, get_resize_edges());
 					break;
 				case View::Type::FULLSCREEN:
-					if(toplevel) call_plugin_for_view("wm-actions/set-fullscreen", !toplevel->toplevel()->current().fullscreen);
+					if(toplevel) call_plugin("wm-actions/set-fullscreen", true, { {"state", !toplevel->toplevel()->current().fullscreen} });
 					break;
 				case View::Type::SEND_TO_BACK:
-					call_plugin_for_view("wm-actions/send-to-back", false); // note: state does not matter
+					call_plugin("wm-actions/send-to-back", true);
 					break;
 				case View::Type::ALWAYS_ON_TOP:
-					call_plugin_for_view("wm-actions/set-always-on-top", !target_view->has_data("wm-actions-above"));
+					call_plugin("wm-actions/set-always-on-top", true, { {"state", !target_view->has_data("wm-actions-above")} });
 					break;
 				case View::Type::STICKY:
-					if(toplevel) call_plugin_for_view("wm-actions/set-sticky", !toplevel->sticky);
+					if(toplevel) call_plugin("wm-actions/set-sticky", true, { {"state", !toplevel->sticky} });
 					break;
 				default:
 					break;
@@ -535,29 +536,25 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			return 0;
 		}
 		
+		/* Determine which corner of a view to start a resize action from. */
+		uint32_t get_resize_edges() const {
+			const std::string& e = resize_edges;
+			if(e == "auto") return 0;
+			if(e == "top_left") return WLR_EDGE_TOP | WLR_EDGE_LEFT;
+			if(e == "top_right") return WLR_EDGE_TOP | WLR_EDGE_RIGHT;
+			if(e == "bottom_left") return WLR_EDGE_BOTTOM | WLR_EDGE_LEFT;
+			if(e == "bottom_right") return WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
+			return 0; // not reached
+		}
+		
 		/* call a plugin activator -- do this from the idle_call, so 
 		 * that our grab interface does not get in the way; also take
 		 * care of refocusing the original view if needed */
-		void call_plugin(const std::string& plugin_activator) {
-			set_idle_action([this, plugin_activator] () {
+		void call_plugin(const std::string& plugin_activator, bool include_view = false, nlohmann::json data = nlohmann::json()) {
+			data["output_id"] = output->get_id();
+			if(include_view) data["view_id"] = target_view->get_id();
+			set_idle_action([this, plugin_activator, data] () {
 				LOGI("Call plugin: ", plugin_activator);
-				
-				nlohmann::json data;
-				data["output_id"] = output->get_id();
-				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;
-				repo->call_method(plugin_activator, data);
-			});
-		}
-		
-		void call_plugin_for_view(const std::string& plugin_activator, bool state) {
-			uint32_t view_id = target_view->get_id();
-			set_idle_action([this, plugin_activator, view_id, state] () {
-				LOGI("Call plugin: ", plugin_activator);
-				
-				nlohmann::json data;
-				data["output_id"] = output->get_id();
-				data["view_id"] = view_id;
-				data["state"] = state;
 				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;
 				repo->call_method(plugin_activator, data);
 			});

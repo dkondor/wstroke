@@ -56,5 +56,30 @@
 			<_long>Use this timeout for ending gestures if they were started with the previous timeout.</_long>
 			<default>0</default>
 		</option>
+		<option name="resize_edges" type="string">
+			<_short>Resize corner</_short>
+			<_long>Specify which corner of a view "Resize" actions are started. Auto means to always use the corner closest to the mouse.</_long>
+			<default>bottom_right</default>
+			<desc>
+				<value>auto</value>
+				<_name>Auto</_name>
+			</desc>
+			<desc>
+				<value>top_left</value>
+				<_name>Top left</_name>
+			</desc>
+			<desc>
+				<value>top_right</value>
+				<_name>Top right</_name>
+			</desc>
+			<desc>
+				<value>bottom_left</value>
+				<_name>Bottom left</_name>
+			</desc>
+			<desc>
+				<value>bottom_right</value>
+				<_name>Bottom right</_name>
+			</desc>
+		</option>
 	</plugin>
 </wayfire>

@@ -483,7 +483,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			}
 		}
 		void visit(const Plugin* action) override {
-			call_plugin(action->get_action());
+			call_plugin(action->get_action(), true);
 		}
 	
 	protected:

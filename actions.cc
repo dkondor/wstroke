@@ -177,6 +177,23 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	widgets->get_widget("expander_apps", expander_apps);
 	widgets->get_widget("vpaned_apps", vpaned_apps);
 	
+	Gtk::HeaderBar *header;
+	widgets->get_widget("main_header", header);
+	Gtk::Box *box = Gtk::manage(new Gtk::Box);
+	header->pack_end(*box);
+	Gtk::Button *button_import = Gtk::manage(new Gtk::Button("Import"));
+	Gtk::Button *button_export = Gtk::manage(new Gtk::Button("Export"));
+	Gtk::Image *import_img, *export_img;
+	widgets->get_widget("image12", import_img);
+	widgets->get_widget("image13", export_img);
+	button_import->set_image(*import_img);
+	button_export->set_image(*export_img);
+	button_import->set_always_show_image(true);
+	button_export->set_always_show_image(true);
+	box->pack_start(*button_import);
+	box->pack_start(*button_export);
+	box->show_all();
+	
 	button_record->signal_clicked().connect([this]() {
 		Gtk::TreeModel::Path path;
 		Gtk::TreeViewColumn *col;

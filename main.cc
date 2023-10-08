@@ -43,9 +43,9 @@ int main(int argc, char **argv)
 {
 	char* xdg_config = getenv("XDG_CONFIG_HOME");
 	std::string home_dir = getenv("HOME");
-	std::string old_config_dir = home_dir + "/.easystroke";
-	std::string config_dir = xdg_config ? std::string(xdg_config) + "/wstroke" :
-		home_dir + "/.config/wstroke";
+	std::string old_config_dir = home_dir + "/.easystroke/";
+	std::string config_dir = xdg_config ? std::string(xdg_config) + "/wstroke/" :
+		home_dir + "/.config/wstroke/";
 	
 	auto app = Gtk::Application::create(argc, argv, "org.wstroke.config");
 	
@@ -77,7 +77,7 @@ int main(int argc, char **argv)
 	ActionDB actions_db;
 	bool config_read;
 	try {
-		config_read = actions_db.read(config_dir);
+		config_read = actions_db.read(config_dir + ActionDB::current_actions_fn);
 	}
 	catch(std::exception& e) {
 		fprintf(stderr, "%s\n", e.what());
@@ -86,17 +86,19 @@ int main(int argc, char **argv)
 	if(!config_read) {
 		if(std::filesystem::exists(old_config_dir, ec) && std::filesystem::is_directory(old_config_dir, ec)) {
 			KeyCodes::keycode_errors = 0;
-			try {
-				config_read = actions_db.read(old_config_dir);
-			}
-			catch(std::exception& e) {
-				fprintf(stderr, "%s\n", e.what());
-				config_read = false;
+			for(const char* const * x = ActionDB::easystroke_actions_versions; *x; ++x) {
+				try {
+					config_read = actions_db.read(old_config_dir + *x);
+				}
+				catch(std::exception& e) {
+					fprintf(stderr, "%s\n", e.what());
+					config_read = false;
+				}
 			}
 		}
 		if(!config_read) {
 			try {
-				config_read = actions_db.read(DATA_DIR);
+				config_read = actions_db.read(std::string(DATA_DIR) + "/" + ActionDB::current_actions_fn);
 			}
 			catch(std::exception& e) {
 				fprintf(stderr, "%s\n", e.what());

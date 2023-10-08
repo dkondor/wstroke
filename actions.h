@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -69,7 +69,6 @@ class Actions {
 		void on_add_app();
 		void on_add_group();
 		void on_apps_selection_changed();
-		void on_expanded();
 		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions);
 		void update_action_list();
 		void update_row(const Gtk::TreeRow &row);
@@ -121,6 +120,8 @@ class Actions {
 
 		Gtk::TreeView *apps_view;
 		Glib::RefPtr<AppsStore> apps_model;
+		/* helper to find a given app in apps_view / apps_model */
+		bool get_action_item(const ActionListDiff* x, Gtk::TreeIter& it);
 
 		class Single : public Gtk::TreeModel::ColumnRecord {
 			public:
@@ -159,6 +160,17 @@ class Actions {
 		ActionListDiff *action_list;
 		Glib::RefPtr<Gtk::Builder> widgets;
 		ActionDB& actions;
+		
+		/* import / export */
+		Gtk::Window* import_dialog;
+		Gtk::Button* button_import_cancel;
+		Gtk::Button* button_import_import;
+		Gtk::FileChooserButton* import_file_chooser;
+		Gtk::RadioButton* import_add;
+		Gtk::InfoBar* import_info;
+		Gtk::Label* import_info_label;
+		void try_import();
+		void try_export();
 		
 		/* main window */
 		std::unique_ptr<Gtk::Window> main_win;

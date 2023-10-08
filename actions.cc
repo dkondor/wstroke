@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,16 +18,18 @@
 #include "actiondb.h"
 #include "stroke_draw.h"
 #include "convert_keycodes.h"
+#include <filesystem>
 #include <toplevel-grabber.h>
 #include <glibmm/i18n.h>
 #include <gdkmm.h>
+#include <gtkmm/filechoosernative.h>
 #include <gdk/gdkwayland.h>
 
 #include <X11/XKBlib.h>
 //~ #include "grabber.h"
 #include "cellrenderertextish.h"
 #include "stroke_drawing_area.h"
-
+#include "config.h"
 #include <typeinfo>
 
 bool TreeViewMulti::on_button_press_event(GdkEventButton* event) {
@@ -135,7 +137,6 @@ static void on_actions_editing_started(GtkCellRenderer *, GtkCellEditable *edita
 
 Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	apps_view(0),
-	vpaned_position(-1),
 	editing_new(false),
 	editing(false),
 	action_list(actions_.get_root()),
@@ -174,18 +175,70 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	widgets->get_widget("button_reset_actions", button_reset_actions);
 	widgets->get_widget("button_about", button_about);
 	widgets->get_widget("check_show_deleted", check_show_deleted);
-	widgets->get_widget("expander_apps", expander_apps);
-	widgets->get_widget("vpaned_apps", vpaned_apps);
 	
-	Gtk::Dialog *import_dialog;
 	Gtk::Button *button_import, *button_export;
+	Gtk::LinkButton *import_easystroke, *import_default;
 	widgets->get_widget("import_dialog", import_dialog);
 	widgets->get_widget("button_import", button_import);
 	widgets->get_widget("button_export", button_export);
-	/* TODO: add interaction for these buttons! */
-	button_import->signal_clicked().connect([import_dialog]() {
-		import_dialog->run();
+	widgets->get_widget("import_import", button_import_import);
+	widgets->get_widget("import_cancel", button_import_cancel);
+	widgets->get_widget("import_easystroke", import_easystroke);
+	widgets->get_widget("import_default", import_default);
+	widgets->get_widget("import_file_chooser", import_file_chooser);
+	widgets->get_widget("import_add", import_add);
+	widgets->get_widget("import_info", import_info);
+	widgets->get_widget("import_info_label", import_info_label);
+	button_export->signal_clicked().connect([this]() {
+		try_export();
 	});
+	button_import->signal_clicked().connect([this]() {
+		import_dialog->show_all();
+	});
+	button_import_cancel->signal_clicked().connect([this]() {
+		import_dialog->close();
+	});
+	button_import_import->signal_clicked().connect([this]() {
+		try_import();
+	});
+	import_easystroke->signal_activate_link().connect([this]() {
+		std::string old_config_dir = std::string(getenv("HOME")) + "/.easystroke/";
+		std::error_code ec;
+		bool found = false;
+		if(std::filesystem::exists(old_config_dir, ec) && std::filesystem::is_directory(config_dir, ec)) {
+			for(const char* const * x = ActionDB::easystroke_actions_versions; *x; ++x) {
+				std::string fn = old_config_dir + *x;
+				if(std::filesystem::exists(fn, ec) && std::filesystem::is_regular_file(fn, ec)) {
+					import_file_chooser->set_filename(fn);
+					found = true;
+					break;
+				}
+			}
+		}
+		if(!found) {
+			import_info_label->set_text(_("Cannot find Easystroke configuration. Make sure that Easystroke is properly installed."));
+			import_info->show_all();
+			gtk_info_bar_set_revealed(import_info->gobj(), TRUE);
+		}
+		else gtk_info_bar_set_revealed(import_info->gobj(), FALSE);
+		return true;
+	}, false);
+	import_default->signal_activate_link().connect([this]() {
+		std::string fn = std::string(DATA_DIR) + "/" + ActionDB::current_actions_fn;
+		std::error_code ec;
+		if(std::filesystem::exists(fn, ec) && std::filesystem::is_regular_file(fn, ec)) {
+			import_file_chooser->set_filename(fn);
+			gtk_info_bar_set_revealed(import_info->gobj(), FALSE);
+		}
+		else {
+			import_info_label->set_text(_("Cannot find the default configuration. Make sure that WStroke is properly installed."));
+			import_info->show_all();
+			gtk_info_bar_set_revealed(import_info->gobj(), TRUE);
+		}
+		return true;
+	}, false);
+	import_info->signal_response().connect([this] (auto) { gtk_info_bar_set_revealed(import_info->gobj(), FALSE); });
+	import_file_chooser->signal_file_set().connect([this] () { gtk_info_bar_set_revealed(import_info->gobj(), FALSE); });
 	
 	button_record->signal_clicked().connect([this]() {
 		Gtk::TreeModel::Path path;
@@ -200,8 +253,8 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	button_remove_app->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_app));
 	button_reset_actions->signal_clicked().connect([this]() {
 		std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-			for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-				Gtk::TreeRow row(*tm->get_iter(*i));
+			for(const auto& x : paths) {
+				Gtk::TreeRow row(*tm->get_iter(x));
 				action_list->reset(row[cols.id]);
 			}
 			update_action_list();
@@ -237,7 +290,7 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	col_name->set_resizable();
 
 	type_store = Gtk::ListStore::create(type);
-	for (const TypeInfo *i = all_types; i->name; i++)
+	for(const TypeInfo *i = all_types; i->name; i++)
 		(*(type_store->append()))[type.type] = _(i->name);
 
 	Gtk::CellRendererCombo *type_renderer = Gtk::manage(new Gtk::CellRendererCombo);
@@ -273,8 +326,6 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	tv.enable_model_drag_dest();
 
 	check_show_deleted->signal_toggled().connect(sigc::mem_fun(*this, &Actions::update_action_list));
-	expander_apps->property_expanded().signal_changed().connect(sigc::mem_fun(*this, &Actions::on_apps_selection_changed));
-	expander_apps->property_expanded().signal_changed().connect(sigc::mem_fun(*this, &Actions::on_expanded));
 	apps_view->get_selection()->signal_changed().connect(sigc::mem_fun(*this, &Actions::on_apps_selection_changed));
 	apps_model = AppsStore::create(ca, this);
 
@@ -320,7 +371,7 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	add_exception->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_add_exclude));
 	remove_exception->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_remove_exclude));
 	
-	for (const std::string& cl : actions.get_exclude_apps()) {
+	for(const std::string& cl : actions.get_exclude_apps()) {
 		Gtk::TreeModel::Row row = *(exclude_tm->append());
 		row[exclude_cols.type] = cl;
 	}
@@ -772,6 +823,19 @@ void Actions::on_button_delete() {
 	update_counts();
 }
 
+bool Actions::get_action_item(const ActionListDiff* x, Gtk::TreeIter& it) {
+	bool found = false;
+	apps_model->foreach_iter([this, x, &it, &found] (const Gtk::TreeModel::iterator& iter) {
+		if ((*iter)[ca.actions] == x) {
+			it = iter;
+			found = true;
+			return true;
+		}
+		return false;
+	});
+	return found;
+}
+
 void Actions::on_add_app() {
 	std::string name;
 	if (!get_app_id_dialog(name, *main_win)) return;
@@ -789,14 +853,16 @@ void Actions::on_add_app() {
 		return;
 	}
 	
-	ActionListDiff *parent = action_list->app ? actions.get_root() : action_list;
+	ActionListDiff *parent = action_list->app ? action_list->get_parent() : action_list;
+	if (!parent || parent->app) throw std::runtime_error("Expected app group as parent node of an app!\n");
+	Gtk::TreeModel::iterator tree_it;
+	if(!get_action_item(parent, tree_it)) throw std::runtime_error("Expected group not found in the app list!\n");
+	
 	ActionListDiff *child = parent->add_child(name, true);
-	const Gtk::TreeNodeChildren &ch = parent == actions.get_root() ?
-		apps_model->children().begin()->children() :
-		apps_view->get_selection()->get_selected()->children();
-	Gtk::TreeRow row = *(apps_model->append(ch));
+	Gtk::TreeRow row = *(apps_model->append(tree_it->children()));
 	row[ca.app] = app_name_hr(name);
 	row[ca.actions] = child;
+	row[ca.count] = child->count_actions();
 	actions.apps[name] = child;
 	Gtk::TreePath path = apps_model->get_path(row);
 	apps_view->expand_to_path(path);
@@ -827,50 +893,58 @@ void Actions::on_remove_app() {
 		if (!ok)
 			return;
 	}
+	bool app_tmp = action_list->app;
+	std::string name_tmp;
+	if(app_tmp) name_tmp = action_list->name;
 	if (!action_list->remove())
 		return;
+	if(app_tmp) actions.apps.erase(name_tmp);
 	apps_model->erase(*apps_view->get_selection()->get_selected());
 	update_actions();
 }
 
 void Actions::on_add_group() {
-	ActionListDiff *parent = action_list->app ? actions.get_root() : action_list;
+	ActionListDiff *parent = action_list;
 	Glib::ustring name = _("Group");
-	ActionListDiff *child = parent->add_child(name, false);
-	const Gtk::TreeNodeChildren &ch = parent == actions.get_root() ?
-		apps_model->children().begin()->children() :
-		apps_view->get_selection()->get_selected()->children();
-	Gtk::TreeRow row = *(apps_model->append(ch));
-	row[ca.app] = name;
+	
+	Gtk::TreeModel::iterator tree_it;
+	if(!get_action_item(parent, tree_it)) throw std::runtime_error("Expected item not found in the app list!\n");
+	Gtk::TreeRow row = *(apps_model->append(tree_it->children()));
+	
+	ActionListDiff *child;
+	Gtk::TreePath path;
+	if(parent->app) {
+		/* we convert this app to a new group and add the app as its child */
+		child = parent->add_child(parent->name, true);
+		parent->app = false;
+		parent->name = name;
+		actions.apps.at(child->name) = child;
+		row[ca.app] = app_name_hr(child->name);
+		(*tree_it)[ca.app] = name;
+		path = apps_model->get_path(*tree_it);
+	}
+	else {
+		/* parent is a group, we add a group as its child */
+		child = parent->add_child(name, false);
+		row[ca.app] = name;
+		path = apps_model->get_path(row);
+	}
 	row[ca.actions] = child;
-	actions.apps[name] = child;
-	Gtk::TreePath path = apps_model->get_path(row);
+	row[ca.count] = child->count_actions();
 	apps_view->expand_to_path(path);
 	apps_view->set_cursor(path, *apps_view->get_column(0), true);
 	update_actions();
 }
 
-void Actions::on_expanded() {
-	if (expander_apps->get_expanded()) {
-		vpaned_apps->set_position(vpaned_position);
-	} else {
-		if(vpaned_apps->property_position_set().get_value())
-			vpaned_position = vpaned_apps->get_position();
-		else
-			vpaned_position = -1;
-		vpaned_apps->property_position_set().set_value(false);
-	}
-}
-
 void Actions::on_apps_selection_changed() {
 	ActionListDiff *new_action_list = actions.get_root();
-	if (expander_apps->property_expanded().get_value()) {
-		if (apps_view->get_selection()->count_selected_rows()) {
-			Gtk::TreeIter i = apps_view->get_selection()->get_selected();
-			new_action_list = (*i)[ca.actions];
-		}
-		button_remove_app->set_sensitive(new_action_list != actions.get_root());
+	
+	if (apps_view->get_selection()->count_selected_rows()) {
+		Gtk::TreeIter i = apps_view->get_selection()->get_selected();
+		new_action_list = (*i)[ca.actions];
 	}
+	button_remove_app->set_sensitive(new_action_list != actions.get_root());
+	
 	if (action_list != new_action_list) {
 		action_list = new_action_list;
 		update_action_list();
@@ -887,28 +961,25 @@ void Actions::update_counts() {
 
 void Actions::update_action_list() {
 	check_show_deleted->set_sensitive(action_list != actions.get_root());
-	boost::shared_ptr<std::set<Unique *> > ids = action_list->get_ids(check_show_deleted->get_active());
+	std::set<Unique*> ids = action_list->get_ids(check_show_deleted->get_active());
 	const Gtk::TreeNodeChildren &ch = tm->children();
 
 	std::list<Gtk::TreeRowReference> refs;
-	for (Gtk::TreeIter i = ch.begin(); i != ch.end(); i++) {
-		Gtk::TreeRowReference ref(tm, Gtk::TreePath(*i));
-		refs.push_back(ref);
-	}
+	for(const auto& x : ch) refs.push_back(Gtk::TreeRowReference(tm, Gtk::TreePath(x)));
 
-	for (std::list<Gtk::TreeRowReference>::iterator ref = refs.begin(); ref != refs.end(); ref++) {
-		Gtk::TreeIter i = tm->get_iter(ref->get_path());
-		std::set<Unique *>::iterator id = ids->find((*i)[cols.id]);
-		if (id == ids->end()) {
+	for(const auto& ref : refs) {
+		Gtk::TreeIter i = tm->get_iter(ref.get_path());
+		auto id = ids.find((*i)[cols.id]);
+		if (id == ids.end()) {
 			tm->erase(i);
 		} else {
-			ids->erase(id);
+			ids.erase(id);
 			update_row(*i);
 		}
 	}
-	for (std::set<Unique *>::const_iterator i = ids->begin(); i != ids->end(); i++) {
+	for(const auto& x : ids) {
 		Gtk::TreeRow row = *tm->append();
-		row[cols.id] = *i;
+		row[cols.id] = x;
 		update_row(row);
 	}
 }
@@ -1135,7 +1206,7 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 void Actions::save_actions() {
 	if(save_error) return;
 	try {
-		actions.write(config_dir);
+		actions.write(config_dir + ActionDB::current_actions_fn);
 	} catch (std::exception &e) {
 		save_error = true;
 		fprintf(stderr, _("Error: Couldn't save action database: %s.\n"), e.what());
@@ -1152,6 +1223,47 @@ void Actions::save_actions() {
 			auto app = Gtk::Application::get_default();
 			if(app) app->quit();
 			else Gtk::Main::quit();
+		}
+	}
+}
+
+void Actions::try_import() {
+	fprintf(stderr, "Import target: %s\n", import_file_chooser->get_filename().c_str());
+	ActionDB tmp_db;
+	bool read = false;
+	try {
+		read = tmp_db.read(import_file_chooser->get_filename());
+	}
+	catch(std::exception& e) {
+		fprintf(stderr, "%s\n", e.what());
+		read = false;
+	}
+	
+	if(read) {
+		tm->clear();
+		apps_model->clear();
+		
+		if(import_add->get_active()) actions.merge_actions(tmp_db);
+		else actions.overwrite_actions(std::move(tmp_db));
+		
+		update_action_list();
+		load_app_list(apps_model->children(), actions.get_root());
+		update_counts();
+	}
+	
+	import_dialog->close();
+	save_actions();
+}
+
+void Actions::try_export() {
+	auto fc = Gtk::FileChooserNative::create(_("Save strokes"), *main_win, Gtk::FileChooserAction::FILE_CHOOSER_ACTION_SAVE, _("Save"), _("Cancel"));
+	if(fc->run() == Gtk::RESPONSE_ACCEPT) {
+		fprintf(stderr, "Trying to save actions to %s\n", fc->get_filename().c_str());
+		try {
+			actions.write(fc->get_filename());
+		}
+		catch(std::exception& e) {
+			fprintf(stderr, "%s\n", e.what());
 		}
 	}
 }

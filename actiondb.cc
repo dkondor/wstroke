@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -255,9 +255,10 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 	ar & exclude_apps;
 }
 
+const char ActionDB::current_actions_fn[] = "actions-wstroke";
+char const * const ActionDB::easystroke_actions_versions[5] = { "actions-0.5.6", "actions-0.4.1", "actions-0.4.0", "actions", nullptr };
 
-static char const * const actions_versions[] = { "-wstroke", "-0.5.6", "-0.4.1", "-0.4.0", "", nullptr };
-
+/*
 bool ActionDB::read(const std::string& config_dir) {
 	std::string filename = config_dir+"/actions";
 	for (const char * const *v = actions_versions; *v; v++) {
@@ -273,18 +274,27 @@ bool ActionDB::read(const std::string& config_dir) {
 	}
 	return false;
 }
+*/
+
+bool ActionDB::read(const std::string& config_file_name) {
+	if(!std::filesystem::exists(config_file_name)) return false;
+	if(!std::filesystem::is_regular_file(config_file_name)) return false;
+	std::ifstream ifs(config_file_name.c_str(), std::ios::binary);
+	if(ifs.fail()) return false;
+	boost::archive::text_iarchive ia(ifs);
+	ia >> *this;
+	return true;
+}
 
 
-
-
-void ActionDB::write(const std::string& config_dir) {
-	std::string filename = config_dir+"/actions"+actions_versions[0];
-	std::string tmp = filename + ".tmp";
+void ActionDB::write(const std::string& config_file_name) {
+	// std::string filename = config_dir+"/actions"+actions_versions[0];
+	std::string tmp = config_file_name + ".tmp";
 	std::ofstream ofs(tmp.c_str());
 	boost::archive::text_oarchive oa(ofs);
 	oa << (const ActionDB &)(*this);
 	ofs.close();
-	if (rename(tmp.c_str(), filename.c_str()))
+	if (rename(tmp.c_str(), config_file_name.c_str()))
 		throw std::runtime_error(_("rename() failed"));
 	printf("Saved actions.\n");
 }
@@ -302,10 +312,6 @@ RStrokeInfo ActionListDiff::get_info(Unique *id, bool *deleted, bool *stroke, bo
 		*action = false;
 	RStrokeInfo si = parent ? parent->get_info(id) : RStrokeInfo(new StrokeInfo);
 	std::map<Unique *, StrokeInfo>::const_iterator i = added.find(id);
-	for (i = added.begin(); i != added.end(); i++) {
-		if (i->first == id)
-			break;
-	}
 	if (i == added.end()) {
 		return si;
 	}
@@ -327,59 +333,41 @@ RStrokeInfo ActionListDiff::get_info(Unique *id, bool *deleted, bool *stroke, bo
 	return si;
 }
 
-boost::shared_ptr<std::map<Unique *, StrokeSet> > ActionListDiff::get_strokes() const {
-	boost::shared_ptr<std::map<Unique *, StrokeSet> > strokes = parent ? parent->get_strokes() :
-		boost::shared_ptr<std::map<Unique *, StrokeSet> >(new std::map<Unique *, StrokeSet>);
-	for (std::set<Unique *>::const_iterator i = deleted.begin(); i != deleted.end(); i++)
-		strokes->erase(*i);
-	for (std::map<Unique *, StrokeInfo>::const_iterator i = added.begin(); i != added.end(); i++)
-		if (i->second.strokes.size())
-			(*strokes)[i->first] = i->second.strokes;
+std::map<Unique*, StrokeSet> ActionListDiff::get_strokes() const {
+	std::map<Unique*, StrokeSet> strokes = parent ? parent->get_strokes() : std::map<Unique*, StrokeSet>();
+	for(const auto& x : deleted) strokes.erase(x);
+	for(const auto& x : added) if(x.second.strokes.size()) strokes[x.first] = x.second.strokes;
 	return strokes;
 }
 
-boost::shared_ptr<std::set<Unique *> > ActionListDiff::get_ids(bool include_deleted) const {
-	boost::shared_ptr<std::set<Unique *> > ids = parent ? parent->get_ids(false) :
-		boost::shared_ptr<std::set<Unique *> >(new std::set<Unique *>);
-	if (!include_deleted)
-		for (std::set<Unique *>::const_iterator i = deleted.begin(); i != deleted.end(); i++)
-			ids->erase(*i);
-	for (std::map<Unique *, StrokeInfo>::const_iterator i = added.begin(); i != added.end(); i++)
-		ids->insert(i->first);
+std::set<Unique*> ActionListDiff::get_ids(bool include_deleted) const {
+	std::set<Unique*> ids = parent ? parent->get_ids(false) : std::set<Unique*>();
+	if(!include_deleted) for(const auto& x : deleted) ids.erase(x);
+	for(const auto& x : added) ids.insert(x.first);
 	return ids;
 }
 
-
-void ActionListDiff::all_strokes(std::list<RStroke> &strokes) const {
-	for (std::map<Unique *, StrokeInfo>::const_iterator i = added.begin(); i != added.end(); i++)
-		for (std::set<RStroke>::const_iterator j = i->second.strokes.begin(); j != i->second.strokes.end(); j++)
-			strokes.push_back(*j);
-	for (std::list<ActionListDiff>::const_iterator i = children.begin(); i != children.end(); i++)
-		i->all_strokes(strokes);
-}
-
 RAction ActionListDiff::handle(RStroke s, RRanking &r) const {
-	if (!s)
-		return RAction();
+	if (!s) return RAction();
 	r.reset(new Ranking);
 	r->stroke = s;
 	r->score = 0.0;
-	boost::shared_ptr<std::map<Unique *, StrokeSet> > strokes = get_strokes();
-	for (std::map<Unique *, StrokeSet>::const_iterator i = strokes->begin(); i!=strokes->end(); i++) {
-		for (StrokeSet::iterator j = i->second.begin(); j!=i->second.end(); j++) {
+	const std::map<Unique*, StrokeSet> strokes = get_strokes();
+	for(const auto& x : strokes) {
+		for(const auto& y : x.second) {
 			double score;
-			int match = Stroke::compare(s, *j, score);
+			int match = Stroke::compare(s, y, score);
 			if (match < 0)
 				continue;
-			RStrokeInfo si = get_info(i->first);
+			RStrokeInfo si = get_info(x.first);
 			r->r.insert(std::pair<double, std::pair<std::string, RStroke> >
-					(score, std::pair<std::string, RStroke>(si->name, *j)));
+					(score, std::pair<std::string, RStroke>(si->name, y)));
 			if (score > r->score) {
 				r->score = score;
 				if (match) {
 					r->name = si->name;
 					r->action = si->action;
-					r->best_stroke = *j;
+					r->best_stroke = y;
 				}
 			}
 		}
@@ -387,52 +375,31 @@ RAction ActionListDiff::handle(RStroke s, RRanking &r) const {
 	return r->action;
 }
 
-void ActionListDiff::handle_advanced(RStroke s, std::map<guint, RAction> &as,
-		std::map<guint, RRanking> &rs, int b1, int b2) const {
-	if (!s)
-		return;
-	boost::shared_ptr<std::map<Unique *, StrokeSet> > strokes = get_strokes();
-	for (std::map<Unique *, StrokeSet>::const_iterator i = strokes->begin(); i!=strokes->end(); i++) {
-		for (StrokeSet::iterator j = i->second.begin(); j!=i->second.end(); j++) {
-			int b = (*j)->button;
-			if (!s->timeout && !b)
-				continue;
-			s->button = b;
-			double score;
-			int match = Stroke::compare(s, *j, score);
-			if (match < 0)
-				continue;
-			Ranking *r;
-			if (b == b1)
-				b = b2;
-			if (rs.count(b)) {
-				r = rs[b].get();
-			} else {
-				r = new Ranking;
-				rs[b].reset(r);
-				r->stroke = RStroke(new Stroke(*s));
-				r->score = -1;
-			}
-			RStrokeInfo si = get_info(i->first);
-			r->r.insert(std::pair<double, std::pair<std::string, RStroke> >
-					(score, std::pair<std::string, RStroke>(si->name, *j)));
-			if (score > r->score) {
-				r->score = score;
-				if (match) {
-					r->name = si->name;
-					r->action = si->action;
-					r->best_stroke = *j;
-					as[b] = si->action;
-				}
-			}
-		}
-	}
+void ActionDB::merge_actions(const ActionDB& other) {
+	/* first step: only root and exclude apps are added */
+	for(const auto& x : other.exclude_apps) exclude_apps.insert(x);
+	
+	for(const auto& x : other.root.added) root.add(x.second);
 }
 
-
-ActionListDiff::~ActionListDiff() {
-/*	if (app)
-		actions.apps.erase(name); */
+void ActionListDiff::clear() {
+	for(auto& x : children) x.clear();
+	for(auto& x : added) if(!(parent && parent->contains(x.first))) delete x.first;
+	deleted.clear();
+	added.clear();
+	order.clear();
+	children.clear();
 }
 
+void ActionDB::overwrite_actions(ActionDB&& other) {
+	exclude_apps = std::move(other.exclude_apps);
+	apps.clear();
+	root.clear();
+	root.deleted  = std::move(other.root.deleted);
+	root.added    = std::move(other.root.added);
+	root.order    = std::move(other.root.order);
+	root.children = std::move(other.root.children);
+	root.add_apps(apps);
+	root.fix_tree(false);
+}
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -398,6 +398,21 @@ class ActionListDiff {
 			i->fix_tree(rebuild_order);
 		}
 	}
+	
+	void remove_r(Unique *id, bool is_parent) {
+		bool really = !(parent && parent->contains(id));
+		if (really) {
+			added.erase(id);
+			order.remove(id);
+			update_order();
+		} else
+			deleted.insert(id);
+		for (std::list<ActionListDiff>::iterator i = children.begin(); i != children.end(); i++)
+			i->remove_r(id, false);
+		if (really && is_parent) delete id;
+	}
+	
+	void clear();
 public:
 	int level;
 	bool app;
@@ -408,6 +423,7 @@ public:
 	typedef std::list<ActionListDiff>::iterator iterator;
 	iterator begin() { return children.begin(); }
 	iterator end() { return children.end(); }
+	ActionListDiff *get_parent() { return parent; }
 
 	RStrokeInfo get_info(Unique *id, bool *deleted = 0, bool *stroke = 0, bool *name = 0, bool *action = 0) const;
 	int order_size() const { return order.size(); }
@@ -421,7 +437,7 @@ public:
 		return parent && (added.count(id) || deleted.count(id)) && parent->contains(id);
 	}
 
-	Unique *add(StrokeInfo &si, Unique *before = 0) {
+	Unique *add(const StrokeInfo &si, Unique *before = 0) {
 		Unique *id = new Unique;
 		added.insert(std::pair<Unique *, StrokeInfo>(id, si));
 		id->level = level;
@@ -443,18 +459,7 @@ public:
 			return true;
 		return parent && parent->contains(id);
 	}
-	bool remove(Unique *id) {
-		bool really = !(parent && parent->contains(id));
-		if (really) {
-			added.erase(id);
-			order.remove(id);
-			update_order();
-		} else
-			deleted.insert(id);
-		for (std::list<ActionListDiff>::iterator i = children.begin(); i != children.end(); i++)
-			i->remove(id);
-		return really;
-	}
+	void remove(Unique *id) { remove_r(id, true); }
 	void reset(Unique *id) {
 		if (!parent)
 			return;
@@ -484,7 +489,6 @@ public:
 				parent->children.erase(i);
 				return true;
 			}
-
 		}
 		return false;
 	}
@@ -507,17 +511,14 @@ public:
 		return true;
 	}
 
-	boost::shared_ptr<std::map<Unique *, StrokeSet> > get_strokes() const;
-	boost::shared_ptr<std::set<Unique *> > get_ids(bool include_deleted) const;
+	std::map<Unique*, StrokeSet> get_strokes() const;
+	std::set<Unique*> get_ids(bool include_deleted) const;
 	int count_actions() const {
 		return (parent ? parent->count_actions() : 0) + order.size() - deleted.size();
 	}
-	void all_strokes(std::list<RStroke> &strokes) const;
 	RAction handle(RStroke s, RRanking &r) const;
-	// b1 is always reported as b2
-	void handle_advanced(RStroke s, std::map<uint32_t, RAction> &a, std::map<uint32_t, RRanking> &r, int b1, int b2) const;
 
-	~ActionListDiff();
+	~ActionListDiff() { }
 };
 BOOST_CLASS_VERSION(ActionListDiff, 1)
 
@@ -533,6 +534,7 @@ public:
 private:
 	ActionListDiff root;
 	std::unordered_set<std::string> exclude_apps;
+	unsigned int read_version = 0;
 public:
 	typedef std::map<Unique *, StrokeInfo>::const_iterator const_iterator;
 	const const_iterator begin() const { return root.added.begin(); }
@@ -540,13 +542,16 @@ public:
 
 	ActionListDiff *get_root() { return &root; }
 	
-	/* try to read actions from a config file under the given dir 
+	unsigned int get_read_version() const { return read_version; }
+	
+	/* try to read actions from the given config file
 	 * returns false if no config file found, throws an exception
-	 * on other errors */
-	bool read(const std::string& config_dir);
-	/* try to save actions to the config file under the given dir
+	 * on other errors
+	 * Note: call this function only once for an ActionDB */
+	bool read(const std::string& config_file_name);
+	/* try to save actions to the config file
 	 * throws exception on failure */
-	void write(const std::string& config_dir);
+	void write(const std::string& config_file_name);
 
 	const ActionListDiff *get_action_list(const std::string& wm_class) const {
 		std::map<std::string, ActionListDiff *>::const_iterator i = apps.find(wm_class);
@@ -558,7 +563,14 @@ public:
 	bool add_exclude_app(const std::string& cl) { return exclude_apps.insert(cl).second; }
 	bool remove_exclude_app(const std::string& cl) { return exclude_apps.erase(cl); }
 	
+	void merge_actions(const ActionDB& other);
+	void overwrite_actions(ActionDB&& other);
+	
 	ActionDB();
+	~ActionDB() { root.clear(); }
+	
+	static const char current_actions_fn[];
+	static char const * const easystroke_actions_versions[5];
 };
 BOOST_CLASS_VERSION(ActionDB, 4)
 

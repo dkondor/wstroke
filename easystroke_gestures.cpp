@@ -248,6 +248,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		wf::wl_timer<false> timeout;
 		
 		std::string config_dir;
+		std::string config_file;
 		
 		/* Handle views being unmapped -- needed to avoid segfault if the "target" views disappear */
 		wf::signal::connection_t<wf::view_unmapped_signal> view_unmapped = [=] (wf::view_unmapped_signal *ev) {
@@ -276,6 +277,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			char* xdg_config = getenv("XDG_CONFIG_HOME");
 			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
 			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
+			config_file = config_dir + ActionDB::current_actions_fn;
 		}
 		~wstroke() { fini(); }
 		
@@ -507,7 +509,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(actions_tmp) {
 				bool config_read = false;
 				try {
-					config_read = actions_tmp->read(config_dir);
+					config_read = actions_tmp->read(config_file);
 				}
 				catch(std::exception& e) {
 					LOGE(e.what());
@@ -520,7 +522,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			}
 			if(inotify_fd >= 0) {
 				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
-				std::string config_file = config_dir + "actions-wstroke";
 				inotify_add_watch(inotify_fd, config_file.c_str(), IN_CLOSE_WRITE);
 			}
 		}

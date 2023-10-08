@@ -49,6 +49,56 @@ extern "C"
 
 #include "input_events.hpp"
 
+template<>
+const std::string& ActionListDiff<false>::get_stroke_name(unique_t id) const {
+	auto it = added.find(id);
+	if(it != added.end() && it->second.name != "") return it->second.name;
+	//!! TODO: check for non-null parent ??
+	return parent->get_stroke_name(id);
+}
+
+template<>
+std::map<stroke_id, const Stroke*> ActionListDiff<false>::get_strokes() const {
+	std::map<stroke_id, const Stroke*> strokes = parent ? parent->get_strokes() : std::map<stroke_id, const Stroke*>();
+	for(const auto& x : deleted) strokes.erase(x);
+	for(const auto& x : added) if(!x.second.stroke.trivial()) strokes[x.first] = &x.second.stroke;
+	return strokes;
+}
+
+template<>
+Action* ActionListDiff<false>::handle(const Stroke& s, Ranking* r) const {
+	double best_score = 0.0;
+	Action* ret = nullptr;
+	if(r) r->stroke = &s;
+	const auto strokes = get_strokes();
+	for(const auto& x : strokes) {
+		const Stroke& y = *x.second;
+		double score;
+		int match = Stroke::compare(s, y, score);
+		if (match < 0)
+			continue;
+		bool new_best = false;
+		if(score > best_score) {
+			new_best = true;
+			best_score = score;
+			ret = get_stroke_action(x.first);
+			if(r) r->best_stroke = &y;
+		}
+		if(r) {
+			const std::string& name = get_stroke_name(x.first);
+			r->r.insert(std::pair<double, std::pair<std::string, const Stroke*> >
+				(score, std::pair<std::string, const Stroke*>(name, &y)));
+			if(new_best) r->name = name;
+		}
+	}
+	
+	if(r) {
+		r->score = best_score;
+		r->action = ret;
+	}
+	return ret;
+}
+
 
 static const char *default_vertex_shader_source =
 R"(#version 100
@@ -220,8 +270,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			.cancel = [this]() { cancel_stroke(); }
 		};
 		
-		PreStroke ps;
-		std::unique_ptr<ActionDB> actions;
+		Stroke::PreStroke ps;
+		std::unique_ptr<const ActionDB> actions;
 		input_headless input;
 		wf::wl_idle_call idle_generate;
 		wayfire_view target_view;
@@ -277,7 +327,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			char* xdg_config = getenv("XDG_CONFIG_HOME");
 			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
 			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
-			config_file = config_dir + ActionDB::current_actions_fn;
+			config_file = config_dir + ActionDB::wstroke_actions_versions[0];
 		}
 		~wstroke() { fini(); }
 		
@@ -509,7 +559,13 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(actions_tmp) {
 				bool config_read = false;
 				try {
-					config_read = actions_tmp->read(config_file);
+					std::error_code ec;
+					if(std::filesystem::exists(config_file, ec) && std::filesystem::is_regular_file(config_file, ec))
+						config_read = actions_tmp->read(config_file, true);
+					else {
+						std::string config_file_old = config_dir + ActionDB::wstroke_actions_versions[1];
+						config_read = actions_tmp->read(config_file_old, true);
+					}
 				}
 				catch(std::exception& e) {
 					LOGE(e.what());
@@ -608,8 +664,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			output->connect(&view_unmapped);
 			
 			active = true;
-			uint32_t t = wf::get_current_time();
-			ps.add(Triple{(float)x, (float)y, t});
+			ps.push_back(Stroke::Point{(double)x, (double)y});
 			return true;
 		}
 		
@@ -620,7 +675,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				/* ignore events without actual movement */
 				if(x == tmp.x && y == tmp.y) return;
 			}
-			Triple t{(float)x, (float)y, (uint32_t)wf::get_current_time()};
+			Stroke::Point t{(double)x, (double)y};
 			if(!is_gesture) {
 				float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
 				if(dist > 16.0f) {
@@ -637,7 +692,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					}
 				}
 			}
-			ps.add(t);
+			ps.push_back(t);
 			if(is_gesture) overlay_node->draw_line(ps[ps.size()-2].x, ps[ps.size()-2].y,
 				ps.back().x, ps.back().y);
 			if(timeout.is_connected()) {
@@ -664,20 +719,20 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(is_gesture) {
 				overlay_node->clear_lines();
 				wf::scene::remove_child(overlay_node);
-				RStroke stroke = Stroke::create(ps, 0, 0, 0, 0);
+				Stroke stroke(ps);
 				/* try to match the stroke, write out match */
-				const ActionListDiff* matcher = nullptr;
+				const ActionListDiff<false>* matcher = nullptr;
 				if(target_view) {
 					const std::string& app_id = target_view->get_app_id();
 					LOGD("Target app id: ", app_id);
 					matcher = actions->get_action_list(app_id);
 				}
-				else matcher = actions->get_root();
+				if(!matcher) matcher = actions->get_root();
 				
-				RRanking rr;
-				RAction action = matcher->handle(stroke, rr);
+				Ranking rr;
+				Action* action = matcher->handle(stroke, &rr);
 				if(action) {
-					LOGD("Matched stroke: ", rr->name);
+					LOGD("Matched stroke: ", rr.name);
 					action->visit(this);
 				}
 				else LOGD("Unmatched stroke");

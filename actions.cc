@@ -26,11 +26,29 @@
 #include <gdk/gdkwayland.h>
 
 #include <X11/XKBlib.h>
-//~ #include "grabber.h"
 #include "cellrenderertextish.h"
 #include "stroke_drawing_area.h"
 #include "config.h"
 #include <typeinfo>
+
+class SelectButton {
+public:
+	SelectButton(const Button& bt, Glib::RefPtr<Gtk::Builder>& widgets_);
+	~SelectButton();
+	bool run();
+	uint32_t button = 0;
+	uint32_t state = 0;
+private:
+	Gtk::MessageDialog *dialog;
+	bool on_button_press(GdkEventButton *ev);
+
+	Gtk::EventBox *eventbox;
+	Gtk::ToggleButton *toggle_shift, *toggle_control, *toggle_alt, *toggle_super;
+	Gtk::ComboBoxText *select_button;
+	Gtk::RadioButton *radio_timeout_default, *radio_instant, *radio_click_hold;
+	sigc::connection handler;
+	Glib::RefPtr<Gtk::Builder> widgets;
+};
 
 bool TreeViewMulti::on_button_press_event(GdkEventButton* event) {
 	int cell_x, cell_y;
@@ -65,7 +83,7 @@ TreeViewMulti::TreeViewMulti() : Gtk::TreeView(), pending(false) {
        });
 }
 
-enum class Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, MISC, GLOBAL, VIEW, PLUGIN };
+enum class Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, /* MISC, */ GLOBAL, VIEW, PLUGIN };
 
 struct TypeInfo {
 	Type type;
@@ -109,7 +127,7 @@ static constexpr const char *type_info_to_name(const std::type_info *info) {
 	return "";
 }
 
-static Glib::ustring get_action_label(RAction action);
+static Glib::ustring get_action_label(const Action* action);
 
 static void on_actions_cell_data_arg(G_GNUC_UNUSED GtkTreeViewColumn *tree_column, GtkCellRenderer *cell, GtkTreeModel *tree_model, GtkTreeIter *iter, gpointer data) {
 	GtkTreePath *path = gtk_tree_model_get_path(tree_model, iter);
@@ -224,7 +242,7 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 		return true;
 	}, false);
 	import_default->signal_activate_link().connect([this]() {
-		std::string fn = std::string(DATA_DIR) + "/" + ActionDB::current_actions_fn;
+		std::string fn = std::string(DATA_DIR) + "/" + ActionDB::wstroke_actions_versions[0];
 		std::error_code ec;
 		if(std::filesystem::exists(fn, ec) && std::filesystem::is_regular_file(fn, ec)) {
 			import_file_chooser->set_filename(fn);
@@ -336,7 +354,7 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	apps_view->get_column(0)->set_expand(true);
 	apps_view->get_column(0)->set_cell_data_func(*apps_view->get_column_cell_renderer(0),
 		[this](Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter) {
-			ActionListDiff *as = (*iter)[ca.actions];
+			ActionListDiff<false> *as = (*iter)[ca.actions];
 			Gtk::CellRendererText *renderer = dynamic_cast<Gtk::CellRendererText *>(cell);
 			if (renderer)
 				renderer->property_editable().set_value(actions.get_root() != as && !as->app);
@@ -347,7 +365,7 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	app_name_renderer->signal_edited().connect([this](const Glib::ustring& path, const Glib::ustring& new_text) {
 		Gtk::TreeRow row(*apps_model->get_iter(path));
 		row[ca.app] = new_text;
-		ActionListDiff *as = row[ca.actions];
+		ActionListDiff<false> *as = row[ca.actions];
 		as->name = new_text;
 		update_actions();
 	});
@@ -475,6 +493,17 @@ static bool get_app_id_dialog(std::string& app_id, Gtk::Window& main_win) {
 	}
 }
 
+template<class ModelRef, class ColType, class KeyType>
+static void set_tree_to_item(ModelRef& model, Gtk::TreeView& tv, const Gtk::TreeModelColumn<ColType>& col, const KeyType& x) {
+	model->foreach([&x, &col, &tv] (const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter) {
+		if ((*iter)[col] == x) {
+			tv.set_cursor(path);
+			return true;
+		}
+		return false;
+	});
+}
+
 void Actions::on_add_exclude() {
 	std::string name;
 	if (!get_app_id_dialog(name, *main_win)) return;
@@ -483,15 +512,7 @@ void Actions::on_add_exclude() {
 		row[exclude_cols.type] = name;
 		Gtk::TreePath path = exclude_tm->get_path(row);
 		exclude_tv->set_cursor(path);
-	} else {
-		exclude_tm->foreach([this, &name] (const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter) {
-			if ((*iter)[exclude_cols.type] == name) {
-				exclude_tv->set_cursor(path);
-				return true;
-			}
-			return false;
-		});
-	}
+	} else set_tree_to_item(exclude_tm, *exclude_tv, exclude_cols.type, name);
 }
 
 void Actions::on_remove_exclude() {
@@ -509,11 +530,11 @@ void Actions::on_remove_exclude() {
 }
 
 
-void Actions::load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions) {
+void Actions::load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff<false> *actions) {
 	Gtk::TreeRow row = *(apps_model->append(ch));
 	row[ca.app] = app_name_hr(actions->name);
 	row[ca.actions] = actions;
-	for (ActionListDiff::iterator i = actions->begin(); i != actions->end(); i++)
+	for (auto i = actions->begin(); i != actions->end(); i++)
 		load_app_list(row.children(), &(*i));
 }
 
@@ -554,20 +575,11 @@ void Actions::on_cell_data_arg(GtkCellRenderer *cell, gchar *path) {
 }
 
 int Actions::compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b) {
-	Unique *x = (*a)[cols.id];
-	Unique *y = (*b)[cols.id];
-	if (x->level == y->level) {
-		if (x->i == y->i)
-			return 0;
-		if (x->i < y->i)
-			return -1;
-		else
-			return 1;
-	}
-	if (x->level < y->level)
-		return -1;
-	else
-		return 1;
+	unsigned int x = actions.get_stroke_order((*a)[cols.id]);
+	unsigned int y = actions.get_stroke_order((*b)[cols.id]);
+	if(x < y) return -1;
+	if(x > y) return 1;
+	return 0;
 }
 
 bool Actions::AppsStore::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest,
@@ -592,7 +604,7 @@ bool Actions::AppsStore::row_drop_possible_vfunc(const Gtk::TreeModel::Path &des
 	if (model != parent->tm)
 		return false;
 	Gtk::TreeIter dest_iter = parent->apps_model->get_iter(dest);
-	ActionListDiff *actions = dest_iter ? (*dest_iter)[parent->ca.actions] : (ActionListDiff *)nullptr;
+	ActionListDiff<false> *actions = dest_iter ? (*dest_iter)[parent->ca.actions] : (ActionListDiff<false> *)nullptr;
 	return actions && actions != parent->action_list;
 }
 
@@ -603,26 +615,35 @@ bool Actions::AppsStore::drag_data_received_vfunc(const Gtk::TreeModel::Path &de
 		return false;
 	if (model != parent->tm)
 		return false;
-	Unique *src_id = (*parent->tm->get_iter(src))[parent->cols.id];
 	Gtk::TreeIter dest_iter = parent->apps_model->get_iter(dest);
-	ActionListDiff *actions = dest_iter ? (*dest_iter)[parent->ca.actions] : (ActionListDiff *)nullptr;
+	ActionListDiff<false> *actions = dest_iter ? (*dest_iter)[parent->ca.actions] : (ActionListDiff<false> *)nullptr;
 	if (!actions || actions == parent->action_list)
 		return false;
 	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
-	if (sel->count_selected_rows() <= 1) {
-		RStrokeInfo si = parent->action_list->get_info(src_id);
-		parent->action_list->remove(src_id);
-		actions->add(*si);
-	} else {
+	if (sel->count_selected_rows() > 1) {
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
-		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			Unique *id = (*parent->tm->get_iter(*i))[parent->cols.id];
-			RStrokeInfo si = parent->action_list->get_info(id);
-			parent->action_list->remove(id);
-			actions->add(*si);
+		std::vector<Gtk::TreeRowReference> refs;
+		std::vector<stroke_id> ids;
+		for(const auto& x : paths) {
+			refs.push_back(Gtk::TreeRowReference(parent->tm, x));
+			ids.push_back((*parent->tm->get_iter(x))[parent->cols.id]);
 		}
+		for(const auto& x : refs) {
+			Gtk::TreeIter i = parent->tm->get_iter(x.get_path());
+			parent->tm->erase(i);
+		}
+		
+		for (auto id : ids) parent->actions.move_stroke_to_app(parent->action_list, actions, id);
 	}
-	parent->update_action_list();
+	else {
+		auto i = parent->tm->get_iter(src);
+		// auto i = tm->get_iter(*paths.begin());
+		stroke_id src_id = (*i)[parent->cols.id];
+		parent->tm->erase(i);
+		parent->actions.move_stroke_to_app(parent->action_list, actions, src_id);
+	}
+	
+	// parent->update_action_list();
 	parent->update_actions();
 	return true;
 }
@@ -631,28 +652,29 @@ bool Actions::Store::row_draggable_vfunc(const Gtk::TreeModel::Path &path) const
 	int col;
 	Gtk::SortType sort;
 	parent->tm->get_sort_column_id(col, sort);
-	if (col != Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID)
+	if (col != Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID) //!! TODO: also allow sort if the sort column is explicitly set to the strokes !!
 		return false;
 	if (sort != Gtk::SORT_ASCENDING)
 		return false;
-	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
+	return true;
+/*	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
 	if (sel->count_selected_rows() <= 1) {
-		Unique *id = (*parent->tm->get_iter(path))[parent->cols.id];
-		return id->level == parent->action_list->level;
+		Unique id = (*parent->tm->get_iter(path))[parent->cols.order];
+		return id.level == parent->action_list->level;
 	} else {
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
 		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			Unique *id = (*parent->tm->get_iter(*i))[parent->cols.id];
-			if (id->level != parent->action_list->level)
+			Unique id = (*parent->tm->get_iter(*i))[parent->cols.order];
+			if (id.level != parent->action_list->level)
 				return false;
 		}
 		return true;
-	}
+	} */
 }
 
 bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const {
 	static bool ignore_next = false;
-	if (gtk_tree_path_get_depth((GtkTreePath *)dest.gobj()) > 1) {
+	if (gtk_tree_path_get_depth((GtkTreePath *)dest.gobj()) > 1) { //??
 		ignore_next = true;
 		return false;
 	}
@@ -660,18 +682,20 @@ bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, c
 		ignore_next = false;
 		return false;
 	}
+	return true;
+/*
 	Gtk::TreePath src;
 	Glib::RefPtr<TreeModel> model;
 	if (!Gtk::TreeModel::Path::get_from_selection_data(selection, model, src))
 		return false;
 	if (model != parent->tm)
 		return false;
-	Unique *src_id = (*parent->tm->get_iter(src))[parent->cols.id];
+	Unique src_id = (*parent->tm->get_iter(src))[parent->cols.order];
 	Gtk::TreeIter dest_iter = parent->tm->get_iter(dest);
-	Unique *dest_id = dest_iter ? (*dest_iter)[parent->cols.id] : (Unique *)0;
-	if (dest_id && src_id->level != dest_id->level)
-		return false;
-	return true;
+	if(!dest_iter) return true;
+	Unique dest_id = (*dest_iter)[parent->cols.order];
+	return (src_id.level == dest_id.level);
+*/
 }
 
 bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) {
@@ -681,29 +705,26 @@ bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, 
 		return false;
 	if (model != parent->tm)
 		return false;
-	Unique *src_id = (*parent->tm->get_iter(src))[parent->cols.id];
+	stroke_id src_id = (*parent->tm->get_iter(src))[parent->cols.id];
 	Gtk::TreeIter dest_iter = parent->tm->get_iter(dest);
-	Unique *dest_id = dest_iter ? (*dest_iter)[parent->cols.id] : (Unique *)0;
-	if (dest_id && src_id->level != dest_id->level)
-		return false;
+	stroke_id dest_id = dest_iter ? (*dest_iter)[parent->cols.id] : 0;
 	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
 	if (sel->count_selected_rows() <= 1) {
-		if (parent->action_list->move(src_id, dest_id)) {
-			(*parent->tm->get_iter(src))[parent->cols.id] = src_id;
-			parent->update_actions();
-		}
+		parent->actions.move_stroke(src_id, dest_id);
+		parent->update_action_list(); //!! TODO: just need to signal a sort order change !!
+		parent->update_actions();
 	} else {
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
-		bool updated = false;
-		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			Unique *id = (*parent->tm->get_iter(*i))[parent->cols.id];
+		std::vector<stroke_id> ids;
+		for(const auto& p : paths) ids.push_back((*parent->tm->get_iter(p))[parent->cols.id]);
+		parent->actions.move_strokes(ids.begin(), ids.end(), dest_id);
+/*		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
+			stroke_id id = (*parent->tm->get_iter(*i))[parent->cols.id];
 			if (parent->action_list->move(id, dest_id))
 				updated = true;
-		}
-		if (updated) {
-			parent->update_action_list();
-			parent->update_actions();
-		}
+		} */
+		parent->update_action_list(); //!! TODO: just signal an update in sort order, no need to re-do the whole thing here !!
+		parent->update_actions();
 	}
 	return false;
 }
@@ -718,7 +739,7 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 		edit = editing_new;
 	} else {
 		row[cols.type] = new_text;
-		RAction new_action;
+		std::unique_ptr<Action> new_action;
 		if (old_type == Type::COMMAND) {
 			row[cols.cmd_save] = (Glib::ustring)row[cols.arg];
 		}
@@ -755,11 +776,11 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 				new_action = Button::create((Gdk::ModifierType)0, 0);
 				edit = true;
 				break;
-			case Type::MISC:
-				fprintf(stderr, "Got Misc action!\n");
+/*			case Type::MISC:
+				// fprintf(stderr, "Got Misc action!\n");
 				new_action = Misc::create(Misc::Type::NONE);
 				edit = true;
-				break;
+				break; */
 			case Type::GLOBAL:
 				new_action = Global::create(Global::Type::NONE);
 				edit = true;
@@ -777,7 +798,7 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 				}
 				break;
 		}
-		action_list->set_action(row[cols.id], new_action);
+		action_list->set_action(row[cols.id], std::move(new_action));
 		update_row(row);
 		update_actions();
 	}
@@ -813,17 +834,34 @@ void Actions::on_button_delete() {
 	if (!ok)
 		return;
 
-	std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-	for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-		Gtk::TreeRow row(*tm->get_iter(*i));
-		action_list->remove(row[cols.id]);
+	Glib::RefPtr<Gtk::TreeSelection> sel = tv.get_selection();
+	std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
+	if (sel->count_selected_rows() <= 1) {
+		auto i = tm->get_iter(*paths.begin());
+		stroke_id id = (*i)[cols.id];
+		tm->erase(i);
+		actions.remove_stroke(action_list, id);
 	}
-	update_action_list();
+	else {
+		std::vector<Gtk::TreeRowReference> refs;
+		std::vector<stroke_id> ids;
+		for(const auto& x : paths) {
+			refs.push_back(Gtk::TreeRowReference(tm, x));
+			ids.push_back((*tm->get_iter(x))[cols.id]);
+		}
+		for(const auto& x : refs) {
+			Gtk::TreeIter i = tm->get_iter(x.get_path());
+			tm->erase(i);
+		}
+		
+		actions.remove_strokes(action_list, ids.begin(), ids.end());
+	}
+//	update_action_list();
 	update_actions();
 	update_counts();
 }
 
-bool Actions::get_action_item(const ActionListDiff* x, Gtk::TreeIter& it) {
+bool Actions::get_action_item(const ActionListDiff<false>* x, Gtk::TreeIter& it) {
 	bool found = false;
 	apps_model->foreach_iter([this, x, &it, &found] (const Gtk::TreeModel::iterator& iter) {
 		if ((*iter)[ca.actions] == x) {
@@ -839,31 +877,23 @@ bool Actions::get_action_item(const ActionListDiff* x, Gtk::TreeIter& it) {
 void Actions::on_add_app() {
 	std::string name;
 	if (!get_app_id_dialog(name, *main_win)) return;
-	auto it = actions.apps.find(name);
-	if(it != actions.apps.end()) {
-		const ActionListDiff* actions = it->second;
-		apps_model->foreach([this, actions] (const Gtk::TreeModel::Path& path, const Gtk::TreeModel::iterator& iter) {
-			if ((*iter)[ca.actions] == actions) {
-				apps_view->expand_to_path(path);
-				apps_view->set_cursor(path);
-				return true;
-			}
-			return false;
-		});
+	
+	const ActionListDiff<false>* name_match = actions.get_action_list(name);
+	if(name_match) {
+		set_tree_to_item(apps_model, *apps_view, ca.actions, name_match);
 		return;
 	}
 	
-	ActionListDiff *parent = action_list->app ? action_list->get_parent() : action_list;
+	ActionListDiff<false> *parent = action_list->app ? action_list->get_parent() : action_list;
 	if (!parent || parent->app) throw std::runtime_error("Expected app group as parent node of an app!\n");
 	Gtk::TreeModel::iterator tree_it;
 	if(!get_action_item(parent, tree_it)) throw std::runtime_error("Expected group not found in the app list!\n");
 	
-	ActionListDiff *child = parent->add_child(name, true);
+	ActionListDiff<false> *child = actions.add_app(parent, name, true);
 	Gtk::TreeRow row = *(apps_model->append(tree_it->children()));
 	row[ca.app] = app_name_hr(name);
 	row[ca.actions] = child;
 	row[ca.count] = child->count_actions();
-	actions.apps[name] = child;
 	Gtk::TreePath path = apps_model->get_path(row);
 	apps_view->expand_to_path(path);
 	apps_view->set_cursor(path);
@@ -890,35 +920,28 @@ void Actions::on_remove_app() {
 		del->grab_focus();
 		bool ok = dialog->run() == 1;
 		dialog->hide();
-		if (!ok)
-			return;
+		if (!ok) return;
 	}
-	bool app_tmp = action_list->app;
-	std::string name_tmp;
-	if(app_tmp) name_tmp = action_list->name;
-	if (!action_list->remove())
-		return;
-	if(app_tmp) actions.apps.erase(name_tmp);
+	actions.remove_app(action_list);
 	apps_model->erase(*apps_view->get_selection()->get_selected());
 	update_actions();
 }
 
 void Actions::on_add_group() {
-	ActionListDiff *parent = action_list;
+	ActionListDiff<false> *parent = action_list;
 	Glib::ustring name = _("Group");
 	
 	Gtk::TreeModel::iterator tree_it;
 	if(!get_action_item(parent, tree_it)) throw std::runtime_error("Expected item not found in the app list!\n");
 	Gtk::TreeRow row = *(apps_model->append(tree_it->children()));
 	
-	ActionListDiff *child;
+	ActionListDiff<false> *child;
 	Gtk::TreePath path;
 	if(parent->app) {
 		/* we convert this app to a new group and add the app as its child */
-		child = parent->add_child(parent->name, true);
+		child = actions.add_app(parent, parent->name, true);
 		parent->app = false;
 		parent->name = name;
-		actions.apps.at(child->name) = child;
 		row[ca.app] = app_name_hr(child->name);
 		(*tree_it)[ca.app] = name;
 		path = apps_model->get_path(*tree_it);
@@ -937,7 +960,7 @@ void Actions::on_add_group() {
 }
 
 void Actions::on_apps_selection_changed() {
-	ActionListDiff *new_action_list = actions.get_root();
+	ActionListDiff<false> *new_action_list = actions.get_root();
 	
 	if (apps_view->get_selection()->count_selected_rows()) {
 		Gtk::TreeIter i = apps_view->get_selection()->get_selected();
@@ -954,14 +977,15 @@ void Actions::on_apps_selection_changed() {
 
 void Actions::update_counts() {
 	apps_model->foreach_iter([this](const Gtk::TreeIter &i) {
-		(*i)[ca.count] = ((ActionListDiff*)(*i)[ca.actions])->count_actions();
+		(*i)[ca.count] = ((ActionListDiff<false>*)(*i)[ca.actions])->count_actions();
 		return false;
 	});
 }
 
+//!! TODO
 void Actions::update_action_list() {
 	check_show_deleted->set_sensitive(action_list != actions.get_root());
-	std::set<Unique*> ids = action_list->get_ids(check_show_deleted->get_active());
+	std::set<stroke_id> ids = action_list->get_ids(check_show_deleted->get_active());
 	const Gtk::TreeNodeChildren &ch = tm->children();
 
 	std::list<Gtk::TreeRowReference> refs;
@@ -969,12 +993,13 @@ void Actions::update_action_list() {
 
 	for(const auto& ref : refs) {
 		Gtk::TreeIter i = tm->get_iter(ref.get_path());
-		auto id = ids.find((*i)[cols.id]);
-		if (id == ids.end()) {
+		Gtk::TreeRow row = *i;
+		auto it = ids.find(row[cols.id]);
+		if (it == ids.end()) {
 			tm->erase(i);
 		} else {
-			ids.erase(id);
-			update_row(*i);
+			ids.erase(it);
+			update_row(row);
 		}
 	}
 	for(const auto& x : ids) {
@@ -985,16 +1010,15 @@ void Actions::update_action_list() {
 }
 
 void Actions::update_row(const Gtk::TreeRow &row) {
-	bool deleted, stroke, name, action;
-	RStrokeInfo si = action_list->get_info(row[cols.id], &deleted, &stroke, &name, &action);
-	row[cols.stroke] = !si->strokes.empty() && *si->strokes.begin() ? 
-		StrokeDrawer::draw((*si->strokes.begin()), STROKE_SIZE, stroke ? 4.0 : 2.0) : StrokeDrawer::drawEmpty(STROKE_SIZE);
-	row[cols.name] = si->name;
-	row[cols.type] = si->action ? type_info_to_name(&typeid(*si->action)) : "";
-	row[cols.arg]  = get_action_label(si->action);
-	row[cols.deactivated] = deleted;
-	row[cols.name_bold] = name;
-	row[cols.action_bold] = action;
+	StrokeRow si = action_list->get_info(row[cols.id]);
+	row[cols.stroke] = !si.stroke->trivial() ? 
+		StrokeDrawer::draw((si.stroke), STROKE_SIZE, si.stroke_overwrite ? 4.0 : 2.0) : StrokeDrawer::drawEmpty(STROKE_SIZE);
+	row[cols.name] = *si.name;
+	row[cols.type] = si.action ? type_info_to_name(&typeid(*si.action)) : "";
+	row[cols.arg]  = get_action_label(si.action);
+	row[cols.deactivated] = si.deleted;
+	row[cols.name_bold] = si.name_overwrite;
+	row[cols.action_bold] = si.action_overwrite;
 }
 
 class Actions::OnStroke {
@@ -1002,10 +1026,8 @@ class Actions::OnStroke {
 	Gtk::Dialog *dialog;
 	Gtk::TreeRow &row;
 public:
-	void run(RStroke stroke) {
-		StrokeSet strokes;
-		strokes.insert(stroke);
-		parent->action_list->set_strokes(row[parent->cols.id], strokes);
+	void run(Stroke* stroke) {
+		parent->action_list->set_stroke(row[parent->cols.id], std::move(*stroke));
 		parent->update_row(row);
 		parent->on_selection_changed();
 		parent->update_actions();
@@ -1031,8 +1053,7 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	static Gtk::Button *del = 0, *cancel = 0;
 	if (!del) widgets->get_widget("button_record_delete", del);
 	if (!cancel) widgets->get_widget("button_record_cancel", cancel);
-	RStrokeInfo si = action_list->get_info(row[cols.id]);
-	if (si) del->set_sensitive(si->strokes.size() != 0);
+	del->set_sensitive(action_list->has_stroke(row[cols.id]));
 
 	OnStroke ps(this, dialog, row);
 	sigc::connection sig = drawarea->stroke_recorded.connect(sigc::mem_fun(ps, &OnStroke::run));
@@ -1046,7 +1067,7 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	if (response != 1)
 		return;
 
-	action_list->set_strokes(row[cols.id], StrokeSet());
+	action_list->set_stroke(row[cols.id], Stroke());
 	update_row(row);
 	on_selection_changed();
 	update_actions();
@@ -1072,24 +1093,21 @@ void Actions::on_selection_changed() {
 
 void Actions::on_button_new() {
 	editing_new = true;
-	Unique *before = 0;
+	stroke_id before = 0;
 	if (tv.get_selection()->count_selected_rows()) {
 		std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
 		Gtk::TreeIter i = tm->get_iter(paths[paths.size()-1]);
 		i++;
-		if (i != tm->children().end())
-			before = (*i)[cols.id];
+		if (i != tm->children().end()) before = (*i)[cols.id];
 	}
 
 	Gtk::TreeModel::Row row = *(tm->append());
-	StrokeInfo si;
-	si.action = Command::create("");
-	Unique *id = action_list->add(si, before);
+	stroke_id id = actions.add_stroke(action_list, StrokeInfo(Command::create("")), before);
 	row[cols.id] = id;
 	std::string name;
 	if (action_list != actions.get_root())
 		name = action_list->name + " ";
-	name += Glib::ustring::compose(_("Gesture %1"), action_list->order_size());
+	name += Glib::ustring::compose(_("Gesture %1"), actions.count_owned_strokes(action_list));
 	action_list->set_name(id, name);
 
 	update_row(row);
@@ -1098,14 +1116,14 @@ void Actions::on_button_new() {
 	update_counts();
 }
 
-void Actions::focus(Unique *id, int col, bool edit) {
+void Actions::focus(stroke_id id, int col, bool edit) {
 	editing = false;
 	Gtk::TreeViewColumn *col1 = tv.get_column(col);
 	Glib::signal_idle().connect([this, id, col1, edit] () {
 		if (!editing) {
 			Gtk::TreeModel::Children chs = tm->children();
 			for (Gtk::TreeIter i = chs.begin(); i != chs.end(); ++i)
-				if ((*i)[cols.id] == id) {
+				if (id == (*i)[cols.id]) {
 					tv.set_cursor(Gtk::TreePath(*i), *col1, edit);
 				}
 		}
@@ -1141,30 +1159,30 @@ void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModi
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
 	if (type == Type::KEY) {
-		RSendKey send_key = SendKey::create(accel_key, accel_mods);
-		Glib::ustring str = get_action_label(send_key);
+		auto send_key = SendKey::create(accel_key, accel_mods);
+		Glib::ustring str = get_action_label(send_key.get());
 		if (row[cols.arg] == str)
 			return;
-		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(send_key));
+		action_list->set_action(row[cols.id], std::move(send_key));
 	} else if (type == Type::SCROLL) {
-		RScroll scroll = Scroll::create(accel_mods);
-		Glib::ustring str = get_action_label(scroll);
+		auto scroll = Scroll::create(accel_mods);
+		Glib::ustring str = get_action_label(scroll.get());
 		if (row[cols.arg] == str)
 			return;
-		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(scroll));
+		action_list->set_action(row[cols.id], std::move(scroll));
 	} else if (type == Type::IGNORE) {
-		RIgnore ignore = Ignore::create(accel_mods);
-		Glib::ustring str = get_action_label(ignore);
+		auto ignore = Ignore::create(accel_mods);
+		Glib::ustring str = get_action_label(ignore.get());
 		if (row[cols.arg] == str)
 			return;
-		action_list->set_action(row[cols.id], boost::static_pointer_cast<Action>(ignore));
+		action_list->set_action(row[cols.id], std::move(ignore));
 	} else return;
 	update_row(row);
 	update_actions();
 }
 
 void Actions::on_combo_edited(const gchar *path_string, guint item) {
-	RAction action;
+	std::unique_ptr<Action> action;
 	Gtk::TreeRow row(*tm->get_iter(path_string));
 	Type type = from_name(row[cols.type]);
 	switch(type) {
@@ -1177,10 +1195,10 @@ void Actions::on_combo_edited(const gchar *path_string, guint item) {
 		default:
 			return;
 	}
-	Glib::ustring str = get_action_label(action);
+	Glib::ustring str = get_action_label(action.get());
 	if (row[cols.arg] == str)
 		return;
-	action_list->set_action(row[cols.id], action);
+	action_list->set_action(row[cols.id], std::move(action));
 	update_row(row);
 	update_actions();
 }
@@ -1190,15 +1208,12 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	Gtk::TreeRow row(*tm->get_iter(path));
 	if (from_name(row[cols.type]) != Type::BUTTON)
 		return;
-	ButtonInfo bi;
-	RButton bt = boost::static_pointer_cast<Button>(action_list->get_info(row[cols.id])->action);
-	if (bt)
-		bi = bt->get_button_info();
-	SelectButton sb(bi, false, false, widgets);
+	Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));
+	Button tmp;
+	SelectButton sb(bt ? *bt : tmp, widgets);
 	if (!sb.run())
 		return;
-	bt = boost::static_pointer_cast<Button>(Button::create(Gdk::ModifierType(sb.event.state), sb.event.button));
-	action_list->set_action(row[cols.id], bt);
+	action_list->set_action(row[cols.id], Button::create(Gdk::ModifierType(sb.state), sb.button));
 	update_row(row);
 	update_actions();
 }
@@ -1206,7 +1221,7 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 void Actions::save_actions() {
 	if(save_error) return;
 	try {
-		actions.write(config_dir + ActionDB::current_actions_fn);
+		actions.write(config_dir + ActionDB::wstroke_actions_versions[0]);
 	} catch (std::exception &e) {
 		save_error = true;
 		fprintf(stderr, _("Error: Couldn't save action database: %s.\n"), e.what());
@@ -1243,7 +1258,7 @@ void Actions::try_import() {
 		tm->clear();
 		apps_model->clear();
 		
-		if(import_add->get_active()) actions.merge_actions(tmp_db);
+		if(import_add->get_active()) actions.merge_actions(std::move(tmp_db));
 		else actions.overwrite_actions(std::move(tmp_db));
 		
 		update_action_list();
@@ -1268,7 +1283,7 @@ void Actions::try_export() {
 	}
 }
 
-SelectButton::SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_) {
+SelectButton::SelectButton(const Button& bt, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_) {
 	widgets->get_widget("dialog_select", dialog);
 	dialog->set_message(_("Select a Mouse or Pen Button"));
 	dialog->set_secondary_text(_("Please place your mouse or pen in the box below and press the button that you want to select.  You can also hold down additional modifiers."));
@@ -1277,14 +1292,8 @@ SelectButton::SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::
 	widgets->get_widget("toggle_alt", toggle_alt);
 	widgets->get_widget("toggle_control", toggle_control);
 	widgets->get_widget("toggle_super", toggle_super);
-	widgets->get_widget("toggle_any", toggle_any);
-	widgets->get_widget("radio_timeout_default", radio_timeout_default);
-	widgets->get_widget("radio_instant", radio_instant);
-	widgets->get_widget("radio_click_hold", radio_click_hold);
 	Gtk::Bin *box_button;
 	widgets->get_widget("box_button", box_button);
-	Gtk::HBox *hbox_button_timeout;
-	widgets->get_widget("hbox_button_timeout", hbox_button_timeout);
 	select_button = dynamic_cast<Gtk::ComboBoxText *>(box_button->get_child());
 	if (!select_button) {
 		select_button = Gtk::manage(new Gtk::ComboBoxText);
@@ -1293,33 +1302,12 @@ SelectButton::SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::
 			select_button->append(Glib::ustring::compose(_("Button %1"), i));
 		select_button->show();
 	}
-	select_button->set_active(bi.button-1);
-	toggle_shift->set_active(bi.button && (bi.state & GDK_SHIFT_MASK));
-	toggle_control->set_active(bi.button && (bi.state & GDK_CONTROL_MASK));
-	toggle_alt->set_active(bi.button && (bi.state & GDK_MOD1_MASK));
-	toggle_super->set_active(bi.button && (bi.state & GDK_SUPER_MASK));
-	toggle_any->set_active(any && bi.button && bi.state == AnyModifier);
-	if (any) {
-		hbox_button_timeout->show();
-		toggle_any->show();
-	} else {
-		hbox_button_timeout->hide();
-		toggle_any->hide();
-	}
-	if (bi.instant)
-		radio_instant->set_active();
-	else if (bi.click_hold)
-		radio_click_hold->set_active();
-	else
-		radio_timeout_default->set_active();
-
-	Gtk::Button *select_default;
-	widgets->get_widget("select_default", select_default);
-	if (def)
-		select_default->show();
-	else
-		select_default->hide();
-
+	select_button->set_active(bt.get_button()-1);
+	toggle_shift->set_active(bt.get_button() && (bt.get_mods() & GDK_SHIFT_MASK));
+	toggle_control->set_active(bt.get_button() && (bt.get_mods() & GDK_CONTROL_MASK));
+	toggle_alt->set_active(bt.get_button() && (bt.get_mods() & GDK_MOD1_MASK));
+	toggle_super->set_active(bt.get_button() && (bt.get_mods() & GDK_SUPER_MASK));
+	
 	if (!eventbox->get_children().size()) {
 		eventbox->set_events(Gdk::BUTTON_PRESS_MASK);
 
@@ -1330,18 +1318,14 @@ SelectButton::SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::
 		eventbox->add(box);
 		box.show();
 	}
-	handler[0] = eventbox->signal_button_press_event().connect(sigc::mem_fun(*this, &SelectButton::on_button_press));
-	handler[1] = toggle_any->signal_toggled().connect(sigc::mem_fun(*this, &SelectButton::on_any_toggled));
-	on_any_toggled();
+	handler = eventbox->signal_button_press_event().connect(sigc::mem_fun(*this, &SelectButton::on_button_press));
 }
 
 SelectButton::~SelectButton() {
-	handler[0].disconnect();
-	handler[1].disconnect();
+	handler.disconnect();
 }
 
 bool SelectButton::run() {
-	//~ grabber->queue_suspend();
 	dialog->show();
 	Gtk::Button *select_ok;
 	widgets->get_widget("select_ok", select_ok);
@@ -1351,32 +1335,24 @@ bool SelectButton::run() {
 		response = dialog->run();
 	} while (!response);
 	dialog->hide();
-	//~ grabber->queue_resume();
 	switch (response) {
 		case 1: // Okay
-			event.button = select_button->get_active_row_number() + 1;
-			if (!event.button)
+			button = select_button->get_active_row_number() + 1;
+			if (!button)
 				return false;
-			event.state = 0;
-			if (toggle_any->get_active()) {
-				event.state = AnyModifier;
-				return true;
-			}
+			state = 0;
 			if (toggle_shift->get_active())
-				event.state |= GDK_SHIFT_MASK;
+				state |= GDK_SHIFT_MASK;
 			if (toggle_control->get_active())
-				event.state |= GDK_CONTROL_MASK;
+				state |= GDK_CONTROL_MASK;
 			if (toggle_alt->get_active())
-				event.state |= GDK_MOD1_MASK;
+				state |= GDK_MOD1_MASK;
 			if (toggle_super->get_active())
-				event.state |= GDK_SUPER_MASK;
-			event.instant = radio_instant->get_active();
-			event.click_hold = radio_click_hold->get_active();
+				state |= GDK_SUPER_MASK;
 			return true;
 		case 2: // Default
-			event.button = 0;
-			event.state = 0;
-			event.instant = false;
+			button = 0;
+			state = 0;
 			return true;
 		case 3: // Click - all the work has already been done
 			return true;
@@ -1387,27 +1363,13 @@ bool SelectButton::run() {
 }
 
 bool SelectButton::on_button_press(GdkEventButton *ev) {
-	event.button = ev->button;
-	event.state  = ev->state;
-	event.instant = radio_instant->get_active();
-	event.click_hold = radio_click_hold->get_active();
-	if (toggle_any->get_active()) {
-		event.state = AnyModifier;
-	} else {
-		if (event.state & Mod4Mask)
-			event.state |= GDK_SUPER_MASK;
-		event.state &= gtk_accelerator_get_default_mod_mask();
-	}
+	button = ev->button;
+	state  = ev->state;
+	if (state & Mod4Mask)
+		state |= GDK_SUPER_MASK;
+	state &= gtk_accelerator_get_default_mod_mask();
 	dialog->response(3);
 	return true;
-}
-
-void SelectButton::on_any_toggled() {
-	bool any = toggle_any->get_active(); 
-	toggle_shift->set_sensitive(!any);
-	toggle_control->set_sensitive(!any);
-	toggle_alt->set_sensitive(!any);
-	toggle_super->set_sensitive(!any);
 }
 
 struct ActionLabel : public ActionVisitor {
@@ -1439,7 +1401,8 @@ struct ActionLabel : public ActionVisitor {
 			else label = _("Ignore");
 		}
 		void visit(const Button* action) override {
-			label = action->get_button_info().get_button_text();
+			label = Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)action->get_mods());
+			label += Glib::ustring::compose(_("Button %1"), action->get_button());
 		}
 		void visit(const Global* action) override {
 			auto t = action->get_action_type();
@@ -1456,18 +1419,11 @@ struct ActionLabel : public ActionVisitor {
 		const Glib::ustring get_label() const { return label; }
 };
 
-static Glib::ustring get_action_label(RAction action) {
+static Glib::ustring get_action_label(const Action* action) {
 	if(!action) return "";
 	ActionLabel label;
 	action->visit(&label);
 	return label.get_label();
-}
-
-ButtonInfo Button::get_button_info() const {
-	ButtonInfo bi;
-	bi.button = button;
-	bi.state = mods;
-	return bi;
 }
 
 const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"),
@@ -1480,16 +1436,4 @@ const char* View::types[View::n_actions] = { N_("None"), N_("Close"), N_("Toggle
 
 const char* View::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 
-Glib::ustring ButtonInfo::get_button_text() const {
-	Glib::ustring str;
-	if (instant)
-		str += _("(Instantly) ");
-	if (click_hold)
-		str += _("(Click & Hold) ");
-	if (state == AnyModifier)
-		str += Glib::ustring() + "(" + _("Any Modifier") + " +) ";
-	else
-		str += Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)state);
-	return str + Glib::ustring::compose(_("Button %1"), button);
-}
 

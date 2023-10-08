@@ -76,12 +76,16 @@ int main(int argc, char **argv)
 	
 	ActionDB actions_db;
 	bool config_read;
-	try {
-		config_read = actions_db.read(config_dir + ActionDB::current_actions_fn);
-	}
-	catch(std::exception& e) {
-		fprintf(stderr, "%s\n", e.what());
-		config_read = false;
+	for(const char* const * x = ActionDB::wstroke_actions_versions; *x; ++x) {
+		try {
+			config_read = actions_db.read(config_dir + *x);
+		}
+		catch(std::exception& e) {
+			fprintf(stderr, "%s\n", e.what());
+			config_read = false;
+			actions_db.clear();
+		}
+		if(config_read) break;
 	}
 	if(!config_read) {
 		if(std::filesystem::exists(old_config_dir, ec) && std::filesystem::is_directory(old_config_dir, ec)) {
@@ -93,12 +97,14 @@ int main(int argc, char **argv)
 				catch(std::exception& e) {
 					fprintf(stderr, "%s\n", e.what());
 					config_read = false;
+					actions_db.clear();
 				}
+				if(config_read) break;
 			}
 		}
 		if(!config_read) {
 			try {
-				config_read = actions_db.read(std::string(DATA_DIR) + "/" + ActionDB::current_actions_fn);
+				config_read = actions_db.read(std::string(DATA_DIR) + "/" + ActionDB::wstroke_actions_versions[0]);
 			}
 			catch(std::exception& e) {
 				fprintf(stderr, "%s\n", e.what());

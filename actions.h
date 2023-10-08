@@ -22,9 +22,10 @@
 #include <glibmm/main.h>
 #include "actiondb.h"
 
-
+/*
 class Unique;
 class ActionListDiff;
+*/
 
 class TreeViewMulti : public Gtk::TreeView {
 	bool pending;
@@ -64,12 +65,12 @@ class Actions {
 		int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
 		class OnStroke;
 
-		void focus(Unique *id, int col, bool edit);
+		void focus(stroke_id id, int col, bool edit);
 
 		void on_add_app();
 		void on_add_group();
 		void on_apps_selection_changed();
-		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff *actions);
+		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff<false> *actions);
 		void update_action_list();
 		void update_row(const Gtk::TreeRow &row);
 		void update_counts();
@@ -87,7 +88,7 @@ class Actions {
 				}
 				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
 				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
-				Gtk::TreeModelColumn<Unique *> id;
+				Gtk::TreeModelColumn<stroke_id> id;
 				Gtk::TreeModelColumn<bool> name_bold, action_bold;
 				Gtk::TreeModelColumn<bool> deactivated;
 		};
@@ -121,7 +122,7 @@ class Actions {
 		Gtk::TreeView *apps_view;
 		Glib::RefPtr<AppsStore> apps_model;
 		/* helper to find a given app in apps_view / apps_model */
-		bool get_action_item(const ActionListDiff* x, Gtk::TreeIter& it);
+		bool get_action_item(const ActionListDiff<false>* x, Gtk::TreeIter& it);
 
 		class Single : public Gtk::TreeModel::ColumnRecord {
 			public:
@@ -134,7 +135,7 @@ class Actions {
 			public:
 				Apps() { add(app); add(actions); add(count); }
 				Gtk::TreeModelColumn<Glib::ustring> app;
-				Gtk::TreeModelColumn<ActionListDiff *> actions;
+				Gtk::TreeModelColumn<ActionListDiff<false>*> actions;
 				Gtk::TreeModelColumn<int> count;
 		};
 		Apps ca;
@@ -157,7 +158,7 @@ class Actions {
 		bool editing_new;
 		bool editing;
 
-		ActionListDiff *action_list;
+		ActionListDiff<false>* action_list;
 		Glib::RefPtr<Gtk::Builder> widgets;
 		ActionDB& actions;
 		
@@ -180,27 +181,6 @@ class Actions {
 		bool exiting;
 		bool save_error;
 };
-
-
-class SelectButton {
-public:
-	SelectButton(ButtonInfo bi, bool def, bool any, Glib::RefPtr<Gtk::Builder>& widgets_);
-	~SelectButton();
-	bool run();
-	ButtonInfo event;
-private:
-	Gtk::MessageDialog *dialog;
-	bool on_button_press(GdkEventButton *ev);
-	void on_any_toggled();
-
-	Gtk::EventBox *eventbox;
-	Gtk::ToggleButton *toggle_shift, *toggle_control, *toggle_alt, *toggle_super, *toggle_any;
-	Gtk::ComboBoxText *select_button;
-	Gtk::RadioButton *radio_timeout_default, *radio_instant, *radio_click_hold;
-	sigc::connection handler[2];
-	Glib::RefPtr<Gtk::Builder> widgets;
-};
-
 
 #endif
 

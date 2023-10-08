@@ -16,16 +16,18 @@
  */
 #ifndef __STROKEDB_H__
 #define __STROKEDB_H__
-#include <string>
 #include <map>
 #include <set>
 #include <list>
 #include <unordered_set>
+#include <unordered_map>
+#include <string>
+#include <type_traits>
 #include <glibmm.h>
+#include <glibmm/i18n.h>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/version.hpp>
 #include <boost/serialization/split_member.hpp>
-#include <iostream>
 
 #include "gesture.h"
 
@@ -42,20 +44,6 @@ class View;
 class Plugin;
 class Ranking;
 
-typedef boost::shared_ptr<Action> RAction;
-typedef boost::shared_ptr<Command> RCommand;
-typedef boost::shared_ptr<SendKey> RSendKey;
-typedef boost::shared_ptr<SendText> RSendText;
-typedef boost::shared_ptr<Scroll> RScroll;
-typedef boost::shared_ptr<Ignore> RIgnore;
-typedef boost::shared_ptr<Button> RButton;
-typedef boost::shared_ptr<Misc> RMisc;
-typedef boost::shared_ptr<Global> RGlobal;
-typedef boost::shared_ptr<View> RView;
-typedef boost::shared_ptr<Plugin> RPlugin;
-typedef boost::shared_ptr<Ranking> RRanking;
-
-class Unique;
 
 class ActionVisitor {
 	public:
@@ -71,89 +59,44 @@ class ActionVisitor {
 		virtual void visit(const Plugin* action) = 0;
 };
 
-class ButtonInfo {
-	friend class boost::serialization::access;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version) {
-		ar & button;
-		ar & state;
-		if (version == 1) {
-			int special;
-			ar & special;
-			return;
-		}
-		if (version < 3)
-			return;
-		ar & instant;
-		if (version < 4)
-			return;
-		ar & click_hold;
-	}
-public:
-	uint32_t button;
-	uint32_t state;
-	bool instant;
-	bool click_hold;
-	bool operator<(const ButtonInfo &bi) const { return button < bi.button; }
-	bool operator==(const ButtonInfo &bi) const {
-		return button == bi.button && state == bi.state && !instant == !bi.instant && !click_hold == !bi.click_hold;
-	}
-	void press();
-	Glib::ustring get_button_text() const;
-	bool overlap(const ButtonInfo &bi) const;
-	ButtonInfo(uint32_t button_) : button(button_), state(0), instant(false), click_hold(false) {}
-	ButtonInfo() : button(0), state(0), instant(false), click_hold(false) {}
-};
-BOOST_CLASS_VERSION(ButtonInfo, 4)
-
-
+/*
 class Modifiers {
 	uint32_t mods;
 	Glib::ustring str;
-	// OSD *osd;
 public:
-	Modifiers(uint32_t mods_, Glib::ustring str_) : mods(mods_), str(str_) /*, osd(nullptr) */ {
-/*		if (prefs.show_osd.get())
-			set_timeout(150);
-		all.insert(this);
-		update_mods(); */
-	}
+	Modifiers(uint32_t mods_, Glib::ustring str_) : mods(mods_), str(str_) { }
 	bool operator==(const Modifiers &m) {
 		return mods == m.mods && str == m.str;
-	}
-/*	virtual void timeout() {
-		osd = new OSD(str);
-	} */
-	~Modifiers() {
-/*		all.erase(this);
-		update_mods();
-		delete osd; */
 	}
 };
 typedef boost::shared_ptr<Modifiers> RModifiers;
 
 bool mods_equal(RModifiers m1, RModifiers m2);
+*/
 
 class Action {
 	friend class boost::serialization::access;
-	friend std::ostream& operator<<(std::ostream& output, const Action& c);
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 public:
 	virtual void visit(ActionVisitor* visitor) const = 0;
 	virtual std::string get_type() const = 0;
 	virtual ~Action() {}
+	virtual std::unique_ptr<Action> clone() const = 0;
 };
 
 class Command : public Action {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Command(const std::string &c) : cmd(c) {}
+	Command(const Command&) = default;
 public:
 	std::string cmd;
 	Command() {}
-	static RCommand create(const std::string &c) { return RCommand(new Command(c)); }
+	static std::unique_ptr<Action> create(const std::string &c) { return std::unique_ptr<Action>(new Command(c)); }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::string get_type() const override { return "Command"; }
 	const std::string& get_cmd() const { return cmd; }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Command(*this)); }
 };
 
 class ModAction : public Action {
@@ -163,8 +106,9 @@ class ModAction : public Action {
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 protected:
 	ModAction() {}
-	uint32_t mods;
+	uint32_t mods = 0;
 	ModAction(uint32_t mods_) : mods(mods_) {}
+	ModAction(const ModAction&) = default;
 public:
 	uint32_t get_mods() const { return mods; }
 };
@@ -181,15 +125,17 @@ class SendKey : public ModAction {
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	SendKey(uint32_t key_, uint32_t mods) :
 		ModAction(mods), key(key_) {}
+	SendKey(const SendKey&) = default;
 public:
 	SendKey() {}
-	static RSendKey create(uint32_t key, uint32_t mods) {
-		return RSendKey(new SendKey(key, mods));
+	static std::unique_ptr<Action> create(uint32_t key, uint32_t mods) {
+		return std::unique_ptr<Action>(new SendKey(key, mods));
 	}
 
 	std::string get_type() const override { return "SendKey"; }
 	uint32_t get_key() const { return key; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new SendKey(*this)); }
 };
 BOOST_CLASS_VERSION(SendKey, 2)
 /* version 2: save hardware keycode in key, omit separate code variable */
@@ -199,57 +145,56 @@ class SendText : public Action {
 	std::string text;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	SendText(Glib::ustring text_) : text(text_) {}
+	SendText(const SendText&) = default;
 public:
 	SendText() {}
-	static RSendText create(Glib::ustring text) { return RSendText(new SendText(text)); }
+	static std::unique_ptr<Action> create(Glib::ustring text) { return std::unique_ptr<Action>(new SendText(text)); }
 
 	std::string get_type() const override { return "SendText"; }
 	const Glib::ustring get_text() const { return text; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new SendText(*this)); }
 };
 
 class Scroll : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Scroll(uint32_t mods) : ModAction(mods) {}
+	Scroll(const Scroll&) = default;
 public:
 	Scroll() {}
-	static RScroll create(uint32_t mods) { return RScroll(new Scroll(mods)); }
+	static std::unique_ptr<Action> create(uint32_t mods) { return std::unique_ptr<Action>(new Scroll(mods)); }
 	std::string get_type() const override { return "Scroll"; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Scroll(*this)); }
 };
 
 class Ignore : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Ignore(uint32_t mods) : ModAction(mods) {}
+	Ignore(const Ignore&) = default;
 public:
 	Ignore() {}
-	static RIgnore create(uint32_t mods) { return RIgnore(new Ignore(mods)); }
+	static std::unique_ptr<Action> create(uint32_t mods) { return std::unique_ptr<Action>(new Ignore(mods)); }
 	std::string get_type() const override { return "Ignore"; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Ignore(*this)); }
 };
 
 class Button : public ModAction {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
 	Button(uint32_t mods, uint32_t button_) : ModAction(mods), button(button_) {}
-	uint32_t button;
+	Button(const Button&) = default;
+	uint32_t button = 0;
 public:
 	Button() {}
-	ButtonInfo get_button_info() const;
-	static unsigned int get_button(RAction act) {
-		if (!act)
-			return 0;
-		Button *b = dynamic_cast<Button *>(act.get());
-		if (!b)
-			return 0;
-		return b->get_button_info().button;
-	}
-	static RButton create(uint32_t mods, uint32_t button_) { return RButton(new Button(mods, button_)); }
+	static std::unique_ptr<Action> create(uint32_t mods, uint32_t button_) { return std::unique_ptr<Action>(new Button(mods, button_)); }
 	std::string get_type() const override { return "Button"; }
 	uint32_t get_button() const { return button; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Button(*this)); }
 };
 
 /* Misc action -- not used anymore, kept only for compatibility with old Easystroke config files */
@@ -264,11 +209,12 @@ private:
 public:
 	Misc() {}
 	std::string get_type() const override { return "Misc"; }
-	static RMisc create(Type t) { return RMisc(new Misc(t)); }
+	static std::unique_ptr<Action> create(Type t) { return std::unique_ptr<Action>(new Misc(t)); }
 	/* does nothing */
 	void visit(G_GNUC_UNUSED ActionVisitor* visitor) const override { return; }
 	/* convert old Misc actions to new representation */
-	RAction convert() const;
+	std::unique_ptr<Action> convert() const;
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Misc(*this)); }
 };
 
 /* new version: instead of Misc, we have Global Actions, View Actions, and Custom Plugin */
@@ -283,14 +229,16 @@ protected:
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	Global(Type t): type(t) { }
 	Global(): type(Type::NONE) { }
+	Global(const Global&) = default;
 public:
 	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::SHOW_DESKTOP) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "Global Action"; }
-	static RGlobal create(Type t) { return RGlobal(new Global(t)); }
+	static std::unique_ptr<Action> create(Type t) { return std::unique_ptr<Action>(new Global(t)); }
 	Type get_action_type() const { return type; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Global(*this)); }
 };
 
 /* actions performed on the active view (either directly or via another plugin) */
@@ -305,14 +253,16 @@ protected:
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	View(Type t): type(t) { }
 	View(): type(Type::NONE) { }
+	View(const View&) = default;
 public:
 	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::STICKY) + 1;
 	static const char* types[n_actions];
 	static const char* get_type_str(Type type);
 	std::string get_type() const override { return "View Action"; }
-	static RView create(Type t) { return RView(new View(t)); }
+	static std::unique_ptr<Action> create(Type t) { return std::unique_ptr<Action>(new View(t)); }
 	Type get_action_type() const { return type; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new View(*this)); }
 };
 
 /* custom plugin activator */
@@ -323,257 +273,302 @@ protected:
 	std::string cmd;
 	Plugin() {}
 	Plugin(const std::string &c) : cmd(c) {}
+	Plugin(const Plugin&) = default;
 public:
-	static RPlugin create(const std::string &c) { return RPlugin(new Plugin(c)); }
+	static std::unique_ptr<Action> create(const std::string &c) { return std::unique_ptr<Action>(new Plugin(c)); }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::string get_type() const override { return "Custom Plugin Action"; }
 	const std::string& get_action() const { return cmd; }
-};
-
-class StrokeSet : public std::set<RStroke> {
-	friend class boost::serialization::access;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Plugin(*this)); }
 };
 
 class StrokeInfo {
+private:
+	friend class ActionDB;
+	template<bool uptr> friend class ActionListDiff;
 	friend class boost::serialization::access;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
+	template<class Archive> void load(Archive & ar, const unsigned int version);
+	template<class Archive> void save(Archive & ar, const unsigned int version) const;
+	
 public:
-	StrokeInfo(RStroke s, RAction a) : action(a) { strokes.insert(s); }
+	StrokeInfo(std::unique_ptr<Action>&& a) : action(std::move(a)) { }
 	StrokeInfo() {}
-	StrokeSet strokes;
-	RAction action;
+	void move_from(StrokeInfo& si) {
+		stroke.stroke.reset(si.stroke.stroke.release());
+		name.swap(si.name);
+		action.reset(si.action.release());
+	}
+	
+	std::unique_ptr<Action> action;
+	Stroke stroke;
 	std::string name;
 };
 typedef boost::shared_ptr<StrokeInfo> RStrokeInfo;
-BOOST_CLASS_VERSION(StrokeInfo, 3)
+BOOST_CLASS_VERSION(StrokeInfo, 4)
+
+struct StrokeRow {
+	const Stroke* stroke = nullptr;
+	const std::string* name = nullptr;
+	const Action* action = nullptr;
+	bool deleted = false;
+	bool stroke_overwrite = false;
+	bool name_overwrite = false;
+	bool action_overwrite = false;
+};
 
 class Ranking {
-	static bool show(RRanking r);
 	int x, y;
 public:
-	RStroke stroke, best_stroke;
-	RAction action;
+	const Stroke *stroke, *best_stroke;
+	Action* action;
 	double score;
 	std::string name;
-	std::multimap<double, std::pair<std::string, RStroke> > r;
-	static void queue_show(RRanking r, RTriple e);
+	std::multimap<double, std::pair<std::string, const Stroke*> > r;
 };
 
-class Unique {
-	friend class boost::serialization::access;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-public:
-	int level;
-	int i;
-};
 
+typedef uint32_t stroke_id;
+class Unique;
+class ActionDB;
+
+template<bool uptr>
 class ActionListDiff {
+	private:
 	friend class boost::serialization::access;
 	friend class ActionDB;
-	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-	ActionListDiff *parent;
-	std::set<Unique *> deleted;
-	std::map<Unique *, StrokeInfo> added;
-	std::list<Unique *> order;
+	using unique_t = typename std::conditional<uptr, Unique*, stroke_id>::type;
+	
+	template<class Archive> void serialize(Archive & ar, const unsigned int version) {
+		ar & deleted;
+		ar & added;
+		ar & name;
+		ar & children;
+		ar & app;
+		if constexpr (!uptr) {
+			ar & parent;
+			return;
+		}
+		if (version == 0) return;
+		ar & order;
+	}
+
+	ActionListDiff *parent = nullptr;
+	std::set<unique_t> deleted;
+	std::map<unique_t, StrokeInfo> added;
+	std::list<unique_t> order; // only for old version (uptr == true)
 	std::list<ActionListDiff> children;
 
-	void update_order() {
-		int j = 0;
-		for (std::list<Unique *>::iterator i = order.begin(); i != order.end(); i++, j++) {
-			(*i)->level = level;
-			(*i)->i = j;
-		}
-	}
-
-	void fix_tree(bool rebuild_order) {
-		if (rebuild_order)
-			for (std::map<Unique *, StrokeInfo>::iterator i = added.begin(); i != added.end(); i++)
-				if (!(parent && parent->contains(i->first)))
-					order.push_back(i->first);
-		update_order();
-		for (std::list<ActionListDiff>::iterator i = children.begin(); i != children.end(); i++) {
-			i->parent = this;
-			i->level = level + 1;
-			i->fix_tree(rebuild_order);
-		}
-	}
-	
-	void remove_r(Unique *id, bool is_parent) {
-		bool really = !(parent && parent->contains(id));
-		if (really) {
-			added.erase(id);
-			order.remove(id);
-			update_order();
-		} else
-			deleted.insert(id);
-		for (std::list<ActionListDiff>::iterator i = children.begin(); i != children.end(); i++)
-			i->remove_r(id, false);
-		if (really && is_parent) delete id;
-	}
-	
-	void clear();
+	void remove(unique_t id, bool really, ActionListDiff* skip = nullptr);
 public:
-	int level;
-	bool app;
+	int level = 0;
+	bool app = false;
 	std::string name;
-
-	ActionListDiff() : parent(0), level(0), app(false) {}
-
-	typedef std::list<ActionListDiff>::iterator iterator;
+	
+	typedef typename std::list<ActionListDiff>::iterator iterator;
 	iterator begin() { return children.begin(); }
 	iterator end() { return children.end(); }
 	ActionListDiff *get_parent() { return parent; }
 
-	RStrokeInfo get_info(Unique *id, bool *deleted = 0, bool *stroke = 0, bool *name = 0, bool *action = 0) const;
-	int order_size() const { return order.size(); }
+	StrokeRow get_info(unique_t id, bool need_attr = true) const;
+	const std::string& get_stroke_name(unique_t id) const;
+	Action* get_stroke_action(unique_t id) const {
+		auto it = added.find(id);
+		if(it != added.end() && it->second.action) return it->second.action.get();
+		//!! TODO: check for non-null parent ??
+		return parent->get_stroke_action(id);
+	}
+	bool has_stroke(unique_t id) const {
+		auto it = added.find(id);
+		if(it != added.end() && !it->second.stroke.trivial()) return true;
+		return false;
+	}
+
 	int size_rec() const {
 		int size = added.size();
-		for (std::list<ActionListDiff>::const_iterator i = children.begin(); i != children.end(); i++)
+		for (auto i = children.begin(); i != children.end(); i++)
 			size += i->size_rec();
 		return size;
 	}
-	bool resettable(Unique *id) const {
-		return parent && (added.count(id) || deleted.count(id)) && parent->contains(id);
-	}
+	bool resettable(unique_t id) const { return parent && (added.count(id) || deleted.count(id)) && parent->contains(id); }
 
-	Unique *add(const StrokeInfo &si, Unique *before = 0) {
-		Unique *id = new Unique;
-		added.insert(std::pair<Unique *, StrokeInfo>(id, si));
-		id->level = level;
-		id->i = order.size();
-		if (before)
-			order.insert(std::find(order.begin(), order.end(), before), id);
-		else
-			order.push_back(id);
-		update_order();
-		return id;
-	}
-	void set_action(Unique *id, RAction action) { added[id].action = action; }
-	void set_strokes(Unique *id, StrokeSet strokes) { added[id].strokes = strokes; }
-	void set_name(Unique *id, std::string name) { added[id].name = name; }
-	bool contains(Unique *id) const {
+	void set_action(unique_t id, std::unique_ptr<Action>&& action) { added[id].action = std::move(action); }
+	void set_stroke(unique_t id, Stroke&& stroke) { added[id].stroke = std::move(stroke); }
+	void set_name(unique_t id, std::string name) { added[id].name = std::move(name); }
+	bool contains(unique_t id) const {
 		if (deleted.count(id))
 			return false;
 		if (added.count(id))
 			return true;
 		return parent && parent->contains(id);
 	}
-	void remove(Unique *id) { remove_r(id, true); }
-	void reset(Unique *id) {
-		if (!parent)
-			return;
-		added.erase(id);
-		deleted.erase(id);
-	}
+	void reset(unique_t id);
 	void add_apps(std::map<std::string, ActionListDiff *> &apps) {
-		if (app)
-			apps[name] = this;
-		for (std::list<ActionListDiff>::iterator i = children.begin(); i != children.end(); i++)
-			i->add_apps(apps);
+		if (app) apps[name] = this;
+		for (auto& x : children) x.add_apps(apps);
 	}
-	ActionListDiff *add_child(std::string name, bool app) {
-		children.push_back(ActionListDiff());
-		ActionListDiff *child = &(children.back());
-		child->name = name;
-		child->app = app;
-		child->parent = this;
-		child->level = level + 1;
-		return child;
-	}
-	bool remove() {
-		if (!parent)
-			return false;
-		for (std::list<ActionListDiff>::iterator i = parent->children.begin(); i != parent->children.end(); i++) {
-			if (&*i == this) {
-				parent->children.erase(i);
-				return true;
-			}
-		}
-		return false;
-	}
-	bool move(Unique *src, Unique *dest) {
-		if (!src)
-			return false;
-		if (src == dest)
-			return false;
-		if (parent && parent->contains(src))
-			return false;
-		if (dest && parent && parent->contains(dest))
-			return false;
-		if (!added.count(src))
-			return false;
-		if (dest && !added.count(dest))
-			return false;
-		order.remove(src);
-		order.insert(dest ? std::find(order.begin(), order.end(), dest) : order.end(), src);
-		update_order();
-		return true;
-	}
+	ActionListDiff *add_child(std::string name, bool app);
 
-	std::map<Unique*, StrokeSet> get_strokes() const;
-	std::set<Unique*> get_ids(bool include_deleted) const;
-	int count_actions() const {
-		return (parent ? parent->count_actions() : 0) + order.size() - deleted.size();
+	std::map<unique_t, const Stroke*> get_strokes() const;
+	std::set<unique_t> get_ids(bool include_deleted) const;
+ 	int count_actions() const {
+		if(parent) return get_ids(false).size();
+		else return added.size();
 	}
-	RAction handle(RStroke s, RRanking &r) const;
-
-	~ActionListDiff() { }
+	Action* handle(const Stroke& s, Ranking* r) const;
 };
-BOOST_CLASS_VERSION(ActionListDiff, 1)
+BOOST_CLASS_VERSION(ActionListDiff<true>, 1)
+BOOST_CLASS_VERSION(ActionListDiff<false>, 1)
+
 
 class ActionDB {
+private:
+	/* input / output via boost */
 	friend class boost::serialization::access;
-	friend class ActionDBWatcher;
+	friend class ActionListDiff<false>;
 	template<class Archive> void load(Archive & ar, const unsigned int version);
 	template<class Archive> void save(Archive & ar, const unsigned int version) const;
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
-
-public:
-	std::map<std::string, ActionListDiff *> apps;
-private:
-	ActionListDiff root;
-	std::unordered_set<std::string> exclude_apps;
-	unsigned int read_version = 0;
-public:
-	typedef std::map<Unique *, StrokeInfo>::const_iterator const_iterator;
-	const const_iterator begin() const { return root.added.begin(); }
-	const const_iterator end() const { return root.added.end(); }
-
-	ActionListDiff *get_root() { return &root; }
 	
-	unsigned int get_read_version() const { return read_version; }
+	/* Recursively convert an ActionListDiff tree from an older version.
+	 * This can be called from the load() function above. */
+	void convert_actionlist(ActionListDiff<false>& dst, ActionListDiff<true>& src,
+		std::unordered_map<Unique*, stroke_id>& mapping, std::unordered_set<Unique*>& extra_unique);
+	unsigned int read_version = 0;
+
+	/* Main storage */
+	std::map<std::string, ActionListDiff<false>*> apps;
+	ActionListDiff<false> root;
+	std::unordered_set<std::string> exclude_apps;
+	
+	/* Storage of stroke_ids.
+	 * We store all stroke_ids in the order they should appear in the
+	 * gesture list along with a mapping from stroke_id to their sort order. */
+	std::list<stroke_id> stroke_order;
+	/* Each stroke_id has an "owner", that is the ActionListDiff where it was added. */
+	std::unordered_map<stroke_id, std::pair<unsigned int, ActionListDiff<false>*>> stroke_map;
+	/* Next available ID. Setting this to 0 means no strokes can be added. */
+	stroke_id next_id = 1;
+	/* Available (previously deleted) stroke IDs that can be reused. */
+	std::vector<stroke_id> available_ids;
+	
+	/* Get a new stroke ID (for adding a new stroke). */
+	stroke_id get_next_id() {
+		if(!next_id) throw std::runtime_error("ActionDB: read-only database!\n");
+		stroke_id ret = next_id;
+		if(available_ids.size()) {
+			ret = available_ids.back();
+			available_ids.pop_back();
+		}
+		else next_id++;
+		return ret;
+	}
+	/* Remove a stroke ID that is no longer used. */
+	void free_id(stroke_id id) {
+		if(id >= next_id) throw std::runtime_error("ActionDB: too large ID to remove!\n");
+		if(id + 1 == next_id) next_id--;
+		else available_ids.push_back(id);
+	}
+	
+	/* Remove a set of strokes from the stroke_order list. Uses a sort
+	 * if the number of strokes is large to avoid quadratic runtime. */
+	template<class iter> void remove_strokes_helper(iter&& begin, iter&& end);
+	template<class iter> void remove_strokes_from_order(iter begin, iter end, bool readonly = false);
+	
+	/* Helper to remove an app. */
+	void remove_app_r(ActionListDiff<false>* app);
+	
+	/* Helper for merging two ActionDBs. */
+	void merge_actions_r(ActionListDiff<false>* dst, ActionListDiff<false>* src, std::unordered_map<stroke_id, stroke_id>& id_map);
+	
+	/* Needed for clear(). */
+	ActionDB(ActionDB&&) = default;
+	ActionDB& operator = (ActionDB&&) = default;
+	
+public:
+	/******************************************************************
+	 * Input / output                                                 */
 	
 	/* try to read actions from the given config file
 	 * returns false if no config file found, throws an exception
 	 * on other errors
 	 * Note: call this function only once for an ActionDB */
-	bool read(const std::string& config_file_name);
+	bool read(const std::string& config_file_name, bool readonly = false);
 	/* try to save actions to the config file
 	 * throws exception on failure */
 	void write(const std::string& config_file_name);
+	/* During read(), the version of the archive is stored. It can be retrieved here
+	 * and used to decide if a conversion from an older took place during loading. */
+	unsigned int get_read_version() const { return read_version; }
+	/* Merge or replace the contents of this ActionDB with the given other one. */
+	void merge_actions(ActionDB&& other);
+	void overwrite_actions(ActionDB&& other);
+	
+	
+	/******************************************************************
+	 * Handling apps and groups of apps                               */
 
-	const ActionListDiff *get_action_list(const std::string& wm_class) const {
-		std::map<std::string, ActionListDiff *>::const_iterator i = apps.find(wm_class);
-		return i == apps.end() ? &root : i->second;
+	const ActionListDiff<false> *get_action_list(const std::string& wm_class) const {
+		auto i = apps.find(wm_class);
+		return i == apps.end() ? nullptr : i->second;
 	}
 	
+	const ActionListDiff<false> *get_root() const { return &root; }
+	ActionListDiff<false> *get_root() { return &root; }
+	
+	/* Add a new ActionListDiff corresponding to the given name with
+	 * the given parent.
+	 * Preconditions: parent must belong to this ActionDB instance and
+	 * name must not have previously been added. */
+	ActionListDiff<false>* add_app(ActionListDiff<false>* parent, const std::string& name, bool real_app);
+	
+	/* Remove an app or group that belongs to this ActionDB and is not the root. */
+	void remove_app(ActionListDiff<false>* app);
+	
+	/* Manage apps that are excluded. */
 	const std::unordered_set<std::string>& get_exclude_apps() const { return exclude_apps; }
 	bool exclude_app(const std::string& cl) const { return exclude_apps.count(cl); }
 	bool add_exclude_app(const std::string& cl) { return exclude_apps.insert(cl).second; }
 	bool remove_exclude_app(const std::string& cl) { return exclude_apps.erase(cl); }
 	
-	void merge_actions(const ActionDB& other);
-	void overwrite_actions(ActionDB&& other);
 	
-	ActionDB();
-	~ActionDB() { root.clear(); }
+	/******************************************************************
+	 * Manage strokes.                                                */
+	const ActionListDiff<false>* get_stroke_owner(stroke_id id) const { return stroke_map.at(id).second; }
+	unsigned int get_stroke_order(stroke_id id) const { return stroke_map.at(id).first; }
+	unsigned int count_owned_strokes(const ActionListDiff<false>* parent) const;
 	
-	static const char current_actions_fn[];
+	/* Add a new stroke owned by the ActionList given as parent. */
+	stroke_id add_stroke(ActionListDiff<false>* parent, StrokeInfo&& si, stroke_id before = 0);
+	
+	/* Remove a set of strokes together (avoiding quadratic runtime). */
+	template<class it>
+	void remove_strokes(ActionListDiff<false>* parent, it&& begin, it&& end);
+	
+	/* Remove or disable the given stroke from the ActionList given.
+	 * If the stroke is owned by this ActionList, it is deleted recursively;
+	 * otherwise, it is only disabled. */
+	void remove_stroke(ActionListDiff<false>* parent, stroke_id id);
+	
+	/* move one stroke, changing the ordering of strokes */
+	void move_stroke(stroke_id id, stroke_id before);
+	
+	/* move a set of strokes from their position to be before dst */
+	template<class it>
+	void move_strokes(it&& begin, it&& end, stroke_id before);
+	
+	/* Move strokes between apps / groups */
+	void move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id);
+	
+	void clear() { *this = ActionDB(); }
+	
+	ActionDB() { root.name = _("Default"); }
+	
+	/* Config file names */
+	static char const * const wstroke_actions_versions[3];
 	static char const * const easystroke_actions_versions[5];
 };
-BOOST_CLASS_VERSION(ActionDB, 4)
-
-
+BOOST_CLASS_VERSION(ActionDB, 5)
 
 #endif
+

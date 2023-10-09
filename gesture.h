@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright (c) 2020, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,42 +19,17 @@
 
 #include "stroke.h"
 #include <vector>
+#include <memory>
 #include <boost/shared_ptr.hpp>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/version.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/split_member.hpp>
 
-// from X.h, needed to use stored values
-#ifndef AnyModifier
-#define AnyModifier (1<<15)
-#endif
-
-
 #define STROKE_SIZE 64
 
-class Stroke;
-class PreStroke;
-
-typedef boost::shared_ptr<Stroke> RStroke;
-typedef boost::shared_ptr<PreStroke> RPreStroke;
-
-struct Triple {
-	float x;
-	float y;
-	uint32_t t; /* time -- not used */
-};
-
-typedef boost::shared_ptr<Triple> RTriple;
-void update_triple(RTriple e, float x, float y, uint32_t t);
-RTriple create_triple(float x, float y, uint32_t t);
-
-
-class PreStroke;
 class Stroke {
-	friend class PreStroke;
 	friend class boost::serialization::access;
-	// friend class Stats;
     public:
 	struct Point {
 		double x;
@@ -79,12 +54,29 @@ class Stroke {
 			}
 		}
 	};
+	
+	using PreStroke = std::vector<Point>;
 
 private:
-	Stroke(PreStroke &s, int trigger_, int button_, unsigned int modifiers_, bool timeout_);
-
 	BOOST_SERIALIZATION_SPLIT_MEMBER()
 	template<class Archive> void load(Archive & ar, const unsigned int version) {
+		if(version >= 6) {
+			unsigned int n;
+			ar & n;
+			if(n) {
+				stroke_t* s = stroke_alloc(n);
+				for(unsigned int i = 0; i < n; i++) {
+					double x, y;
+					ar & x;
+					ar & y;
+					stroke_add_point(s, x, y);
+				}
+				stroke_finish(s);
+				stroke.reset(s);
+			}
+			return;
+		}
+		
 		std::vector<Point> ps;
 		ar & ps;
 		if (ps.size()) {
@@ -92,62 +84,53 @@ private:
 			for (std::vector<Point>::iterator i = ps.begin(); i != ps.end(); ++i)
 				stroke_add_point(s, i->x, i->y);
 			stroke_finish(s);
-			stroke.reset(s, &stroke_free);
+			stroke.reset(s);
 		}
 		if (version == 0) return;
+		
+		int trigger;
+		int button;
+		unsigned int modifiers;
+		bool timeout;
+		
 		ar & button;
-		if (version >= 2)
-			ar & trigger;
-		if (version < 4 && (!button /*|| trigger == (int)prefs.button.get().button*/))
-			trigger = 0;
-		if (version < 3)
-			return;
+		if (version >= 2) ar & trigger;
+		if (version < 3) return;
 		ar & timeout;
-		if (version < 5)
-			return;
+		if (version < 5) return;
 		ar & modifiers;
 
 	}
 	template<class Archive> void save(Archive & ar, __attribute__((unused)) unsigned int version) const {
-		std::vector<Point> ps;
-		for (unsigned int i = 0; i < size(); i++)
-			ps.push_back(points(i));
-		ar & ps;
-		ar & button;
-		ar & trigger;
-		ar & timeout;
-		ar & modifiers;
+		unsigned int n = size();
+		ar & n;
+		for(unsigned int i = 0; i < n; i++) {
+			Point p = points(i);
+			ar & p.x;
+			ar & p.y;
+		}
 	}
+	
+	struct stroke_deleter {
+		void operator()(stroke_t* s) const { stroke_free(s); }
+	};
+	
 public:
-	int trigger;
-	int button;
-	unsigned int modifiers;
-	bool timeout;
-	boost::shared_ptr<stroke_t> stroke;
+	std::unique_ptr<stroke_t, stroke_deleter> stroke;
 
-	Stroke() : trigger(0), button(0), modifiers(0), timeout(false) {}
-	static RStroke create(PreStroke &s, int trigger_, int button_, unsigned int modifiers_, bool timeout_) {
-		return RStroke(new Stroke(s, trigger_, button_, modifiers_, timeout_));
-	}
-    bool show_icon();
+	Stroke() : stroke(nullptr, stroke_deleter()) { }
+	Stroke(const PreStroke &s);
+	Stroke clone() const { Stroke s; if(stroke) s.stroke.reset(stroke_copy(stroke.get())); return s; }
 
-	static RStroke trefoil();
-	static int compare(RStroke, RStroke, double &);
+	static Stroke trefoil();
+	static int compare(const Stroke&, const Stroke&, double &);
 	
 	unsigned int size() const { return stroke ? stroke_get_size(stroke.get()) : 0; }
-	bool trivial() const { return size() == 0 && button == 0; }
+	bool trivial() const { return size() == 0 ; }
 	Point points(int n) const { Point p; stroke_get_point(stroke.get(), n, &p.x, &p.y); return p; }
 	double time(int n) const { return stroke_get_time(stroke.get(), n); }
-	bool is_timeout() const { return timeout; }
 };
-BOOST_CLASS_VERSION(Stroke, 5)
+BOOST_CLASS_VERSION(Stroke, 6)
 BOOST_CLASS_VERSION(Stroke::Point, 1)
 
-class PreStroke : public std::vector<Triple> {
-public:
-	static RPreStroke create() { return RPreStroke(new PreStroke()); }
-	void add(Triple&& p) { push_back(std::move(p)); }
-	void add(const Triple& p) { push_back(p); }
-	bool valid() const { return size() > 2; }
-};
 #endif

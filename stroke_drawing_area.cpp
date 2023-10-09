@@ -1,7 +1,7 @@
 /*
  * stroke_drawing_area.cpp -- Gtk.DrawingArea adapted to record new strokes
  * 
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2020-2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -47,27 +47,27 @@ bool SRArea::on_button_press_event(GdkEventButton* event) {
 	last_x = event->x;
 	last_y = event->y;
 	ps.clear();
-	stroke.reset();
-	ps.add(Triple {(float)last_x, (float)last_y, event->time});
+	stroke = Stroke();
+	ps.push_back(Stroke::Point {last_x, last_y});
 	return true;
 }
 
 bool SRArea::on_button_release_event(GdkEventButton* event) {
 	if(event->button != current_button) return true;
-	draw_line(event->x, event->y, event->time);
+	draw_line(event->x, event->y);
 	current_button = 0;
-	stroke = Stroke::create(ps, 0, 0, AnyModifier, 0);
+	stroke = Stroke(ps);
 	ps.clear();
-	stroke_recorded.emit(stroke);
+	stroke_recorded.emit(&stroke);
 	return true;
 }
 
 bool SRArea::on_motion_notify_event(GdkEventMotion* event) {
-	if(current_button) draw_line(event->x, event->y, event->time);
+	if(current_button) draw_line(event->x, event->y);
 	return true;
 }
 
-void SRArea::draw_line(gdouble x, gdouble y, guint32 t) {
+void SRArea::draw_line(gdouble x, gdouble y) {
 	if(surface && (x != last_x || y != last_y)) {
 		auto cr = Cairo::Context::create(surface);
 		cr->set_source_rgb(0.8, 0, 0);
@@ -81,7 +81,7 @@ void SRArea::draw_line(gdouble x, gdouble y, guint32 t) {
 		int h = std::ceil(std::abs(y - last_y)) + 4;
 		queue_draw_area(x1, y1, w, h);
 		
-		ps.add(Triple {(float)last_x, (float)last_y, t});
+		ps.push_back(Stroke::Point {last_x, last_y});
 		
 		last_x = x;
 		last_y = y;
@@ -95,6 +95,6 @@ void SRArea::clear() {
 		cr->paint();
 	}
 	ps.clear();
-	stroke.reset();
+	stroke = Stroke();
 }
 

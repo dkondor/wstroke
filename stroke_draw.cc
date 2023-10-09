@@ -2,7 +2,7 @@
  * stroke_draw.cc
  * 
  * Copyright (c) 2008-2009, Thomas Jaeger <ThJaeger@gmail.com>
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@ Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::drawEmpty(int size) {
 }
 
 
-Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::draw(RStroke stroke, int size, double width, bool inv) {
+Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::draw(const Stroke* stroke, int size, double width) {
 	Glib::RefPtr<Gdk::Pixbuf> pb = drawEmpty_(size);
 	int w = size;
 	int h = size;
@@ -43,7 +43,7 @@ Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::draw(RStroke stroke, int size, double wi
 	// This is all pretty messed up
 	// http://www.archivum.info/gtkmm-list@gnome.org/2007-05/msg00112.html
 	Cairo::RefPtr<Cairo::ImageSurface> surface = Cairo::ImageSurface::create(row, Cairo::FORMAT_ARGB32, w, h, stride);
-	draw(stroke, surface, 0, 0, pb->get_width(), size, width, inv);
+	draw(stroke, surface, 0, 0, pb->get_width(), size, width);
 	for (int i = 0; i < w; i++) {
 		guint8 *px = row;
 		for (int j = 0; j < h; j++) {
@@ -70,7 +70,7 @@ Glib::RefPtr<Gdk::Pixbuf> StrokeDrawer::drawEmpty_(int size) {
 }
 
 
-void StrokeDrawer::draw(RStroke stroke, Cairo::RefPtr<Cairo::Surface> surface, int x, int y, int w, int h, double width, bool inv) {
+void StrokeDrawer::draw(const Stroke* stroke, Cairo::RefPtr<Cairo::Surface> surface, int x, int y, int w, int h, double width) {
 	const Cairo::RefPtr<Cairo::Context> ctx = Cairo::Context::create (surface);
 	x += width; y += width; w -= 2*width; h -= 2*width;
 	ctx->save();
@@ -92,10 +92,7 @@ void StrokeDrawer::draw(RStroke stroke, Cairo::RefPtr<Cairo::Surface> surface, i
 			z[j-1] = (z[j] - stroke->points(j)) * lambda;
 		for (int j = 0; j < n-1; j++) {
 			// j -> j+1
-			if (inv)
-				ctx->set_source_rgba(stroke->time(j), 0.0, 1.0-stroke->time(j), 1.0);
-			else
-				ctx->set_source_rgba(0.0, stroke->time(j), 1.0-stroke->time(j), 1.0);
+			ctx->set_source_rgba(0.0, stroke->time(j), 1.0-stroke->time(j), 1.0);
 			Stroke::Point p[4];
 			p[0] = stroke->points(j);
 			p[3] = stroke->points(j+1);
@@ -105,11 +102,8 @@ void StrokeDrawer::draw(RStroke stroke, Cairo::RefPtr<Cairo::Surface> surface, i
 			ctx->curve_to(p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
 			ctx->stroke();
 		}
-	} else if (!stroke->button) {
-		if (inv)
-			ctx->set_source_rgba(1.0, 1.0, 0.0, 1.0);
-		else
-			ctx->set_source_rgba(0.0, 0.0, 1.0, 1.0);
+	} else {
+		ctx->set_source_rgba(0.0, 0.0, 1.0, 1.0);
 		ctx->move_to(0.33, 0.33);
 		ctx->line_to(0.67, 0.67);
 		ctx->move_to(0.33, 0.67);
@@ -117,40 +111,9 @@ void StrokeDrawer::draw(RStroke stroke, Cairo::RefPtr<Cairo::Surface> surface, i
 		ctx->stroke();
 	}
 	ctx->restore();
-	Glib::ustring str;
-	if (stroke->modifiers != AnyModifier) {
-		str = Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)(stroke->modifiers));
-		if (str == "")
-			str = "<>";
-		else
-			str = "<" + str + ">";
-	}
-	if (stroke->trigger)
-		str += Glib::ustring::compose("%1\xE2\x86\x92", stroke->trigger);
-	if (stroke->timeout)
-		str += "x";
-	if (stroke->button)
-		str += Glib::ustring::compose("%1", stroke->button);
-	if (str == "")
-		return;
-	if (inv)
-		ctx->set_source_rgba(0.0, 1.0, 1.0, 0.8);
-	else
-		ctx->set_source_rgba(1.0, 0.0, 0.0, 0.8);
-	float font_size = h*0.5;
-	Cairo::TextExtents te;
-	for (;;) {
-		ctx->set_font_size(font_size);
-		ctx->get_text_extents(str, te);
-		if (te.width < w)
-			break;
-		font_size *= 0.9;
-	}
-	ctx->move_to(x+w/2 - te.x_bearing - te.width/2, y+h/2 - te.y_bearing - te.height/2);
-	ctx->show_text(str);
 }
 
-void StrokeDrawer::draw_svg(RStroke stroke, std::string filename) {
+void StrokeDrawer::draw_svg(const Stroke* stroke, std::string filename) {
 	const int S = 32;
 	const int B = 1;
 	Cairo::RefPtr<Cairo::SvgSurface> s = Cairo::SvgSurface::create(filename, S, S);

@@ -1,7 +1,7 @@
 /*
  * stroke_drawing_area.h -- Gtk.DrawingArea adapted to record new strokes
  * 
- * Copyright 2020 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2020-2023 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,8 +28,8 @@ class SRArea : public Gtk::DrawingArea {
 	public:
 		SRArea();
 		void clear();
-		RStroke get_stroke() { return stroke; }
-		sigc::signal<void, RStroke> stroke_recorded;
+		Stroke* get_stroke() { return &stroke; }
+		sigc::signal<void, Stroke*> stroke_recorded;
 		virtual ~SRArea() { }
 	protected:
 		bool on_draw(const Cairo::RefPtr<Cairo::Context>& cr) override;
@@ -38,15 +38,15 @@ class SRArea : public Gtk::DrawingArea {
 		bool on_motion_notify_event(GdkEventMotion* event) override;
 		bool on_configure_event(GdkEventConfigure* event) override;
 		
-		void draw_line(gdouble x, gdouble y, guint32 t);
+		void draw_line(gdouble x, gdouble y);
 		
 		Cairo::RefPtr<Cairo::Surface> surface;
 		guint current_button = 0;
 		gdouble last_x;
 		gdouble last_y;
 		
-		PreStroke ps;
-		RStroke stroke;
+		Stroke::PreStroke ps;
+		Stroke stroke;
 };
 
 

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Thomas Jaeger <ThJaeger@gmail.com>
+ * Copyright (c) 2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +29,7 @@ stroke_t *stroke_alloc(int n);
 void stroke_add_point(stroke_t *stroke, double x, double y);
 void stroke_finish(stroke_t *stroke);
 void stroke_free(stroke_t *stroke);
+stroke_t *stroke_copy(const stroke_t *stroke);
 
 int stroke_get_size(const stroke_t *stroke);
 void stroke_get_point(const stroke_t *stroke, int n, double *x, double *y);

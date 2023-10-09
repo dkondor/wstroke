@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Thomas Jaeger <ThJaeger@gmail.com>
+ * Copyright (c) 2023, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +19,7 @@
 
 #include "stroke.h"
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
@@ -105,6 +107,22 @@ void stroke_free(stroke_t *s) {
 		free(s->p);
 	free(s);
 }
+
+stroke_t *stroke_copy(const stroke_t *stroke) {
+	if(!stroke) return NULL;
+	stroke_t *s = malloc(sizeof(stroke_t));
+	if(!s) return NULL;
+	s->p = calloc(stroke->n, sizeof(struct point));
+	if(!(s->p)) {
+		free(s);
+		return NULL;
+	}
+	s->n = stroke->n;
+	s->capacity = s->n;
+	memcpy(s->p, stroke->p, s->n * sizeof(struct point));
+	return s;
+}
+
 
 int stroke_get_size(const stroke_t *s) { return s->n; }
 

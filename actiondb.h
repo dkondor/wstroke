@@ -530,11 +530,11 @@ public:
 	void remove_stroke(ActionListDiff<false>* parent, stroke_id id);
 	
 	/* move one stroke, changing the ordering of strokes */
-	void move_stroke(stroke_id id, stroke_id before);
+	void move_stroke(stroke_id id, stroke_id before, bool after);
 	
 	/* move a set of strokes from their position to be before dst */
 	template<class it>
-	void move_strokes(it&& begin, it&& end, stroke_id before);
+	void move_strokes(it&& begin, it&& end, stroke_id before, bool after);
 	
 	/* Move strokes between apps / groups */
 	void move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id);

@@ -652,29 +652,15 @@ bool Actions::Store::row_draggable_vfunc(const Gtk::TreeModel::Path &path) const
 	int col;
 	Gtk::SortType sort;
 	parent->tm->get_sort_column_id(col, sort);
-	if (col != Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID) //!! TODO: also allow sort if the sort column is explicitly set to the strokes !!
-		return false;
-	if (sort != Gtk::SORT_ASCENDING)
-		return false;
-	return true;
-/*	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
-	if (sel->count_selected_rows() <= 1) {
-		Unique id = (*parent->tm->get_iter(path))[parent->cols.order];
-		return id.level == parent->action_list->level;
-	} else {
-		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
-		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			Unique id = (*parent->tm->get_iter(*i))[parent->cols.order];
-			if (id.level != parent->action_list->level)
-				return false;
-		}
-		return true;
-	} */
+	if(col ==  Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID ||
+		col == parent->cols.id.index()) return true;
+	else return false;
 }
 
 bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const {
 	static bool ignore_next = false;
-	if (gtk_tree_path_get_depth((GtkTreePath *)dest.gobj()) > 1) { //??
+	if (gtk_tree_path_get_depth((GtkTreePath *)dest.gobj()) > 1) {
+		// this gets triggered when the drag is over an existing row (as opposed to being "in between" rows)
 		ignore_next = true;
 		return false;
 	}
@@ -683,19 +669,6 @@ bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, c
 		return false;
 	}
 	return true;
-/*
-	Gtk::TreePath src;
-	Glib::RefPtr<TreeModel> model;
-	if (!Gtk::TreeModel::Path::get_from_selection_data(selection, model, src))
-		return false;
-	if (model != parent->tm)
-		return false;
-	Unique src_id = (*parent->tm->get_iter(src))[parent->cols.order];
-	Gtk::TreeIter dest_iter = parent->tm->get_iter(dest);
-	if(!dest_iter) return true;
-	Unique dest_id = (*dest_iter)[parent->cols.order];
-	return (src_id.level == dest_id.level);
-*/
 }
 
 bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) {
@@ -705,25 +678,30 @@ bool Actions::Store::drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, 
 		return false;
 	if (model != parent->tm)
 		return false;
+	int col;
+	Gtk::SortType sort;
+	parent->tm->get_sort_column_id(col, sort);
+	if( !(col ==  Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID ||
+		col == parent->cols.id.index()) ) return false;
+	
 	stroke_id src_id = (*parent->tm->get_iter(src))[parent->cols.id];
 	Gtk::TreeIter dest_iter = parent->tm->get_iter(dest);
 	stroke_id dest_id = dest_iter ? (*dest_iter)[parent->cols.id] : 0;
+	
 	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
 	if (sel->count_selected_rows() <= 1) {
-		parent->actions.move_stroke(src_id, dest_id);
-		parent->update_action_list(); //!! TODO: just need to signal a sort order change !!
+		parent->actions.move_stroke(src_id, dest_id, sort == Gtk::SORT_DESCENDING);
+		(*parent->tm->get_iter(src))[parent->cols.id] = src_id;
 		parent->update_actions();
 	} else {
+		/* note: we temporarily unset sorting so that the list is not resorted for each update */
+		parent->tm->set_sort_column(GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, sort);
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
 		std::vector<stroke_id> ids;
 		for(const auto& p : paths) ids.push_back((*parent->tm->get_iter(p))[parent->cols.id]);
-		parent->actions.move_strokes(ids.begin(), ids.end(), dest_id);
-/*		for (std::vector<Gtk::TreePath>::iterator i = paths.begin(); i != paths.end(); ++i) {
-			stroke_id id = (*parent->tm->get_iter(*i))[parent->cols.id];
-			if (parent->action_list->move(id, dest_id))
-				updated = true;
-		} */
-		parent->update_action_list(); //!! TODO: just signal an update in sort order, no need to re-do the whole thing here !!
+		if(sort == Gtk::SORT_DESCENDING) parent->actions.move_strokes(ids.rbegin(), ids.rend(), dest_id, true);
+		else parent->actions.move_strokes(ids.begin(), ids.end(), dest_id, false);
+		parent->tm->set_sort_column(col, sort); // this will apply the new sort
 		parent->update_actions();
 	}
 	return false;
@@ -803,55 +781,82 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 }
 
 void Actions::on_button_delete() {
-	int n = tv.get_selection()->count_selected_rows();
-
-	Glib::ustring str;
-	if (n == 1) {
-		std::vector<Gtk::TreePath> paths = tv.get_selection()->get_selected_rows();
-		auto tmp = Gtk::TreeRow(*tm->get_iter(*paths.begin()));
-		str = Glib::ustring::compose(_("Action \"%1\" is about to be deleted."), tmp[cols.name]);
-	}
-	else
-		str = Glib::ustring::compose(ngettext("One action is about to be deleted.",
-					"%1 actions are about to be deleted", n), n);
-
-	Gtk::MessageDialog *dialog;
-	widgets->get_widget("dialog_delete", dialog);
-	dialog->set_message(ngettext("Delete an Action", "Delete Actions", n));
-	dialog->set_secondary_text(str);
-	Gtk::Button *del;
-	widgets->get_widget("button_delete_delete", del);
-
-	dialog->show();
-	del->grab_focus();
-	bool ok = dialog->run() == 1;
-	dialog->hide();
-	if (!ok)
-		return;
-
+	bool show_deleted = check_show_deleted->get_active();
+	unsigned int to_delete = 0, to_disable = 0;
 	Glib::RefPtr<Gtk::TreeSelection> sel = tv.get_selection();
 	std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
-	if (sel->count_selected_rows() <= 1) {
+	
+	for(const auto& x : paths) {
+		stroke_id id = (*tm->get_iter(x))[cols.id];
+		if(actions.get_stroke_owner(id) == action_list) to_delete++;
+		else to_disable++;
+	}
+	
+	if(to_delete) {
+		Glib::ustring str;
+		if (to_delete == 1) for(const auto& x : paths) {
+			auto tmp = Gtk::TreeRow(*tm->get_iter(x));
+			if(actions.get_stroke_owner(tmp[cols.id]) == action_list) {
+				str = Glib::ustring::compose(_("Action \"%1\" is about to be deleted."), tmp[cols.name]);
+				break;
+			}
+		}
+		else str = Glib::ustring::compose(ngettext("One action is about to be deleted",
+						"%1 actions are about to be deleted", to_delete), to_delete);
+		
+		if(to_disable) str += Glib::ustring::compose(ngettext(" (one additional action will be disabled).",
+						" (%1 additional actions will be disabled).,", to_disable), to_disable);
+		else str += ".";
+		
+		Gtk::MessageDialog *dialog;
+		widgets->get_widget("dialog_delete", dialog);
+		dialog->set_message(ngettext("Delete an Action", "Delete Actions", to_delete));
+		dialog->set_secondary_text(str);
+		Gtk::Button *del;
+		widgets->get_widget("button_delete_delete", del);
+
+		dialog->show();
+		del->grab_focus();
+		bool ok = dialog->run() == 1;
+		dialog->hide();
+		if (!ok)
+			return;
+	}
+
+	if (to_delete + to_disable == 1) {
 		auto i = tm->get_iter(*paths.begin());
 		stroke_id id = (*i)[cols.id];
-		tm->erase(i);
+		if(!(to_disable && show_deleted)) tm->erase(i);
 		actions.remove_stroke(action_list, id);
+		if(to_disable && show_deleted) update_row(*i);
 	}
 	else {
+		/* note: we temporarily unset sorting so that the list is not resorted for each update */
+		int col;
+		Gtk::SortType sort;
+		tm->get_sort_column_id(col, sort);
+		tm->set_sort_column(GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, sort);
+		
 		std::vector<Gtk::TreeRowReference> refs;
 		std::vector<stroke_id> ids;
 		for(const auto& x : paths) {
 			refs.push_back(Gtk::TreeRowReference(tm, x));
 			ids.push_back((*tm->get_iter(x))[cols.id]);
 		}
-		for(const auto& x : refs) {
+		auto end = std::remove_if(refs.begin(), refs.end(), [this, show_deleted](const auto& x) {
 			Gtk::TreeIter i = tm->get_iter(x.get_path());
-			tm->erase(i);
-		}
+			bool remove = !show_deleted || (actions.get_stroke_owner((*i)[cols.id]) == action_list);
+			if(remove) tm->erase(i);
+			return show_deleted && remove;
+		});
 		
 		actions.remove_strokes(action_list, ids.begin(), ids.end());
+		
+		if(show_deleted) for(auto it = refs.begin(); it != end; ++it) update_row(*tm->get_iter(it->get_path()));
+		/* apply sorting to the new selection */
+		tm->set_sort_column(col, sort);
 	}
-//	update_action_list();
+	if(show_deleted && to_disable) 	button_reset_actions->set_sensitive(true);
 	update_actions();
 	update_counts();
 }
@@ -977,12 +982,17 @@ void Actions::update_counts() {
 	});
 }
 
-//!! TODO
 void Actions::update_action_list() {
 	check_show_deleted->set_sensitive(action_list != actions.get_root());
 	std::set<stroke_id> ids = action_list->get_ids(check_show_deleted->get_active());
+	
+	/* note: we temporarily unset sorting so that the list is not resorted for each update */
+	int col;
+	Gtk::SortType sort;
+	tm->get_sort_column_id(col, sort);
+	tm->set_sort_column(GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, sort);
+	
 	const Gtk::TreeNodeChildren &ch = tm->children();
-
 	std::list<Gtk::TreeRowReference> refs;
 	for(const auto& x : ch) refs.push_back(Gtk::TreeRowReference(tm, Gtk::TreePath(x)));
 
@@ -1002,11 +1012,14 @@ void Actions::update_action_list() {
 		row[cols.id] = x;
 		update_row(row);
 	}
+	
+	/* apply sorting to the new selection */
+	tm->set_sort_column(col, sort);
 }
 
 void Actions::update_row(const Gtk::TreeRow &row) {
 	StrokeRow si = action_list->get_info(row[cols.id]);
-	row[cols.stroke] = !si.stroke->trivial() ? 
+	row[cols.stroke] = (si.stroke && !si.stroke->trivial()) ? 
 		StrokeDrawer::draw((si.stroke), STROKE_SIZE, si.stroke_overwrite ? 4.0 : 2.0) : StrokeDrawer::drawEmpty(STROKE_SIZE);
 	row[cols.name] = *si.name;
 	row[cols.type] = si.action ? type_info_to_name(&typeid(*si.action)) : "";

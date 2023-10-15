@@ -86,16 +86,16 @@ StrokeRow ActionListDiff<false>::get_info(stroke_id id, bool need_attr) const {
 	if(need_attr) si.deleted = this->deleted.count(id);
 	
 	auto i = added.find(id);
-	if (i == added.end()) return si;
-	if (i->second.name != "") {
+	if(i == added.end()) return si;
+	if(!parent || i->second.name != "") {
 		si.name = &(i->second.name);
 		if(need_attr) si.name_overwrite = (parent != nullptr);
 	}
-	if (!i->second.stroke.trivial()) {
+	if(!parent || !i->second.stroke.trivial()) {
 		si.stroke = &i->second.stroke;
 		if(need_attr) si.stroke_overwrite = (parent != nullptr);
 	}
-	if (i->second.action) {
+	if(i->second.action) {
 		si.action = i->second.action.get();
 		if(need_attr) si.action_overwrite = (parent != nullptr);
 	}
@@ -219,7 +219,7 @@ void ActionDB::remove_stroke(ActionListDiff<false>* parent, stroke_id id) {
 	remove_strokes(parent, tmp.begin(), tmp.end());
 }
 
-void ActionDB::move_stroke(stroke_id id, stroke_id before) {
+void ActionDB::move_stroke(stroke_id id, stroke_id before, bool after) {
 	if(id == before) return;
 	std::list<stroke_id>::iterator src = stroke_order.end();
 	std::list<stroke_id>::iterator dst = stroke_order.end();
@@ -227,13 +227,14 @@ void ActionDB::move_stroke(stroke_id id, stroke_id before) {
 		if(*it == id) src = it;
 		if(*it == before) dst = it;
 	}
+	if(after && dst != stroke_order.end()) ++dst;
 	if(src == stroke_order.end()) throw std::runtime_error("ActionDB::move_stroke(): stroke ID not found!\n");
 	src = stroke_order.erase(src);
 	unsigned int order = 0;
 	if(dst == stroke_order.end()) {
 		if(!stroke_order.empty()) order = stroke_map.at(stroke_order.back()).first + 1;
 	}
-	else order = stroke_map.at(before).first;
+	else order = stroke_map.at(*dst).first;
 	stroke_map.at(id).first = order;
 	stroke_order.insert(dst, id);
 	for(++order; dst != stroke_order.end(); ++dst, ++order) {
@@ -244,7 +245,7 @@ void ActionDB::move_stroke(stroke_id id, stroke_id before) {
 }
 
 template<class it>
-void ActionDB::move_strokes(it&& begin, it&& end, stroke_id before) {
+void ActionDB::move_strokes(it&& begin, it&& end, stroke_id before, bool after) {
 	remove_strokes_from_order(begin, end, true); // note: we need to keep the order
 	auto dst = stroke_order.end();
 	for(auto it2 = stroke_order.begin(); it2 != stroke_order.end(); ++it2)
@@ -252,7 +253,7 @@ void ActionDB::move_strokes(it&& begin, it&& end, stroke_id before) {
 			dst = it2;
 			break;
 		}
-	
+	if(after && dst != stroke_order.end()) ++dst;
 	stroke_order.insert(dst, begin, end);
 	
 	/* recalculate the sort order for all elements */
@@ -260,7 +261,8 @@ void ActionDB::move_strokes(it&& begin, it&& end, stroke_id before) {
 	for(stroke_id id : stroke_order) stroke_map.at(id).first = order++;
 }
 
-template void ActionDB::move_strokes<std::vector<stroke_id>::iterator>(std::vector<stroke_id>::iterator&& begin, std::vector<stroke_id>::iterator&& end, stroke_id before);
+template void ActionDB::move_strokes<std::vector<stroke_id>::iterator>(std::vector<stroke_id>::iterator&& begin, std::vector<stroke_id>::iterator&& end, stroke_id before, bool after);
+template void ActionDB::move_strokes<std::vector<stroke_id>::reverse_iterator>(std::vector<stroke_id>::reverse_iterator&& begin, std::vector<stroke_id>::reverse_iterator&& end, stroke_id before, bool after);
 
 
 void ActionDB::move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id) {

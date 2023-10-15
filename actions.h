@@ -22,10 +22,6 @@
 #include <glibmm/main.h>
 #include "actiondb.h"
 
-/*
-class Unique;
-class ActionListDiff;
-*/
 
 class TreeViewMulti : public Gtk::TreeView {
 	bool pending;

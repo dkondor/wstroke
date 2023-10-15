@@ -16,7 +16,6 @@
  */
 #include "actiondb.h"
 
-#include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <boost/archive/text_oarchive.hpp>

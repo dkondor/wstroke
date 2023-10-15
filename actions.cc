@@ -776,11 +776,6 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 				new_action = Button::create((Gdk::ModifierType)0, 0);
 				edit = true;
 				break;
-/*			case Type::MISC:
-				// fprintf(stderr, "Got Misc action!\n");
-				new_action = Misc::create(Misc::Type::NONE);
-				edit = true;
-				break; */
 			case Type::GLOBAL:
 				new_action = Global::create(Global::Type::NONE);
 				edit = true;

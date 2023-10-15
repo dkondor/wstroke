@@ -59,21 +59,6 @@ class ActionVisitor {
 		virtual void visit(const Plugin* action) = 0;
 };
 
-/*
-class Modifiers {
-	uint32_t mods;
-	Glib::ustring str;
-public:
-	Modifiers(uint32_t mods_, Glib::ustring str_) : mods(mods_), str(str_) { }
-	bool operator==(const Modifiers &m) {
-		return mods == m.mods && str == m.str;
-	}
-};
-typedef boost::shared_ptr<Modifiers> RModifiers;
-
-bool mods_equal(RModifiers m1, RModifiers m2);
-*/
-
 class Action {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
@@ -294,17 +279,11 @@ private:
 public:
 	StrokeInfo(std::unique_ptr<Action>&& a) : action(std::move(a)) { }
 	StrokeInfo() {}
-	void move_from(StrokeInfo& si) {
-		stroke.stroke.reset(si.stroke.stroke.release());
-		name.swap(si.name);
-		action.reset(si.action.release());
-	}
 	
 	std::unique_ptr<Action> action;
 	Stroke stroke;
 	std::string name;
 };
-typedef boost::shared_ptr<StrokeInfo> RStrokeInfo;
 BOOST_CLASS_VERSION(StrokeInfo, 4)
 
 struct StrokeRow {

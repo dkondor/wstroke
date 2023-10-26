@@ -45,8 +45,24 @@ private:
 	Gtk::EventBox *eventbox;
 	Gtk::ToggleButton *toggle_shift, *toggle_control, *toggle_alt, *toggle_super;
 	Gtk::ComboBoxText *select_button;
-	Gtk::RadioButton *radio_timeout_default, *radio_instant, *radio_click_hold;
 	sigc::connection handler;
+	Glib::RefPtr<Gtk::Builder> widgets;
+};
+
+class SelectTouchpad {
+public:
+	SelectTouchpad(const Touchpad& bt, Glib::RefPtr<Gtk::Builder>& widgets_, const Glib::ustring& action_name);
+	~SelectTouchpad() { }
+	bool run();
+	uint32_t get_fingers() const;
+	Touchpad::Type get_type() const;
+	uint32_t state = 0;
+private:
+	Gtk::Dialog *dialog;
+	Gtk::ToggleButton *toggle_shift, *toggle_control, *toggle_alt, *toggle_super;
+	Gtk::RadioButton *radio_scroll, *radio_pinch, *radio_swipe;
+	Gtk::SpinButton *spin_fingers;
+	Gtk::Adjustment *adj_fingers;
 	Glib::RefPtr<Gtk::Builder> widgets;
 };
 
@@ -83,7 +99,7 @@ TreeViewMulti::TreeViewMulti() : Gtk::TreeView(), pending(false) {
        });
 }
 
-enum class Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, /* MISC, */ GLOBAL, VIEW, PLUGIN };
+enum class Type { COMMAND, KEY, TEXT, SCROLL, IGNORE, BUTTON, /* MISC, */ GLOBAL, VIEW, PLUGIN, TOUCHPAD };
 
 struct TypeInfo {
 	Type type;
@@ -103,6 +119,7 @@ static constexpr TypeInfo all_types[] = {
 	{ Type::GLOBAL,  N_("Global Action"),   &typeid(Global),   CELL_RENDERER_TEXTISH_MODE_Combo },
 	{ Type::VIEW,    N_("WM Action"),       &typeid(View),     CELL_RENDERER_TEXTISH_MODE_Combo },
 	{ Type::PLUGIN,  N_("Custom Plugin"),   &typeid(Plugin),   CELL_RENDERER_TEXTISH_MODE_Text  },
+	{ Type::TOUCHPAD,N_("Touchpad Gesture"),&typeid(Touchpad), CELL_RENDERER_TEXTISH_MODE_Popup },
 	{ Type::COMMAND, 0,                     0,                 CELL_RENDERER_TEXTISH_MODE_Text  }
 };
 
@@ -404,6 +421,15 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 		return true;
 	});
 	timeout->attach();
+	
+	/* dialog to select touchpad actions */
+	Gtk::RadioButton *radio_scroll;
+	Gtk::SpinButton *spin_fingers;
+	widgets->get_widget("touchpad_type_scroll", radio_scroll);
+	widgets->get_widget("touchpad_fingers", spin_fingers);
+	radio_scroll->signal_toggled().connect([radio_scroll, spin_fingers](){
+		spin_fingers->set_sensitive(!radio_scroll->get_active());
+	});
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {
@@ -769,6 +795,10 @@ void Actions::on_type_edited(const Glib::ustring &path, const Glib::ustring &new
 						edit = false;
 					new_action = Plugin::create(cmd_save);
 				}
+				break;
+			case Type::TOUCHPAD:
+				new_action = Touchpad::create(Touchpad::Type::NONE, 2, 0);
+				edit = true;
 				break;
 		}
 		action_list->set_action(row[cols.id], std::move(new_action));
@@ -1214,16 +1244,27 @@ void Actions::on_combo_edited(const gchar *path_string, guint item) {
 void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_GNUC_UNUSED const gchar *path) {
 	tv.grab_focus();
 	Gtk::TreeRow row(*tm->get_iter(path));
-	if (from_name(row[cols.type]) != Type::BUTTON)
-		return;
-	Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));
-	Button tmp;
-	SelectButton sb(bt ? *bt : tmp, widgets);
-	if (!sb.run())
-		return;
-	action_list->set_action(row[cols.id], Button::create(Gdk::ModifierType(sb.state), sb.button));
-	update_row(row);
-	update_actions();
+	Type type = from_name(row[cols.type]);
+	if (type == Type::BUTTON) {
+		Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));
+		Button tmp;
+		SelectButton sb(bt ? *bt : tmp, widgets);
+		if (!sb.run())
+			return;
+		action_list->set_action(row[cols.id], Button::create(Gdk::ModifierType(sb.state), sb.button));
+		update_row(row);
+		update_actions();
+	}
+	if (type == Type::TOUCHPAD) {
+		Touchpad* tp = dynamic_cast<Touchpad*>(action_list->get_stroke_action(row[cols.id]));
+		Touchpad tmp;
+		SelectTouchpad stp(tp ? *tp : tmp, widgets, row[cols.name]);
+		if (!stp.run()) return;
+		auto t = stp.get_type();
+		action_list->set_action(row[cols.id], Touchpad::create(t, (t == Touchpad::Type::SCROLL) ? 2 : stp.get_fingers(), Gdk::ModifierType(stp.state)));
+		update_row(row);
+		update_actions();
+	}
 }
 
 void Actions::save_actions() {
@@ -1380,6 +1421,95 @@ bool SelectButton::on_button_press(GdkEventButton *ev) {
 	return true;
 }
 
+
+SelectTouchpad::SelectTouchpad(const Touchpad& bt, Glib::RefPtr<Gtk::Builder>& widgets_, const Glib::ustring& action_name) : widgets(widgets_) {
+	widgets->get_widget("dialog_touchpad", dialog);
+	Gtk::HeaderBar *header;
+	widgets->get_widget("header_touchpad", header);
+	widgets->get_widget("touchpad_toggle_shift", toggle_shift);
+	widgets->get_widget("touchpad_toggle_alt", toggle_alt);
+	widgets->get_widget("touchpad_toggle_control", toggle_control);
+	widgets->get_widget("touchpad_toggle_super", toggle_super);
+	widgets->get_widget("touchpad_type_scroll", radio_scroll);
+	widgets->get_widget("touchpad_type_swipe", radio_swipe);
+	widgets->get_widget("touchpad_type_pinch", radio_pinch);
+	widgets->get_widget("touchpad_fingers", spin_fingers);
+	
+	/* Note: a GtkAdjustment is not a GtkWidget, so the get_widget function
+	 * cannot be used to retrieve it. Also, widgets holds a reference to it,
+	 * so we don't need to keep the RefPtr. */
+	Glib::RefPtr<Glib::Object> adj_obj = widgets->get_object("touchpad_fingers_adj");
+	adj_fingers = dynamic_cast<Gtk::Adjustment*>(adj_obj.get());
+	if(!adj_fingers) throw std::runtime_error("Error loading UI!\n");
+	
+	Glib::ustring str = Glib::ustring::compose(_("Set properties for action %1"), action_name);
+	header->set_subtitle(str);
+	
+	toggle_shift->set_active(bt.get_mods() & GDK_SHIFT_MASK);
+	toggle_control->set_active(bt.get_mods() & GDK_CONTROL_MASK);
+	toggle_alt->set_active(bt.get_mods() & GDK_MOD1_MASK);
+	toggle_super->set_active(bt.get_mods() & GDK_SUPER_MASK);
+	
+	adj_fingers->set_value(bt.fingers);
+	
+	switch(bt.get_action_type()) {
+		// note: NONE is the default when a new action is added
+		case Touchpad::Type::NONE:
+		case Touchpad::Type::SCROLL:
+			radio_scroll->set_active(true);
+			spin_fingers->set_sensitive(false);
+			break;
+		case Touchpad::Type::PINCH:
+			radio_pinch->set_active(true);
+			spin_fingers->set_sensitive(true);
+			break;
+		case Touchpad::Type::SWIPE:
+			radio_swipe->set_active(true);
+			spin_fingers->set_sensitive(true);
+			break;
+	}
+}
+
+bool SelectTouchpad::run() {
+	dialog->show();
+	Gtk::Button *select_ok;
+	widgets->get_widget("touchpad_select_ok", select_ok);
+	select_ok->grab_focus();
+	int response;
+	do {
+		response = dialog->run();
+	} while (!response);
+	dialog->hide();
+	switch (response) {
+		case Gtk::RESPONSE_OK: // Okay
+			state = 0;
+			if (toggle_shift->get_active())
+				state |= GDK_SHIFT_MASK;
+			if (toggle_control->get_active())
+				state |= GDK_CONTROL_MASK;
+			if (toggle_alt->get_active())
+				state |= GDK_MOD1_MASK;
+			if (toggle_super->get_active())
+				state |= GDK_SUPER_MASK;
+			return true;
+		case Gtk::RESPONSE_CANCEL: // Cancel
+		default: // Something went wrong
+			return false;
+	}
+}
+
+Touchpad::Type SelectTouchpad::get_type() const {
+	if(radio_scroll->get_active()) return Touchpad::Type::SCROLL;
+	if(radio_swipe->get_active()) return Touchpad::Type::SWIPE;
+	if(radio_pinch->get_active()) return Touchpad::Type::PINCH;
+	return Touchpad::Type::NONE;
+}
+
+uint32_t SelectTouchpad::get_fingers() const {
+	uint32_t tmp = (uint32_t)adj_fingers->get_value();
+	return std::max(tmp, 2U);
+}
+
 struct ActionLabel : public ActionVisitor {
 	protected:
 		Glib::ustring label;
@@ -1410,7 +1540,7 @@ struct ActionLabel : public ActionVisitor {
 		}
 		void visit(const Button* action) override {
 			label = Gtk::AccelGroup::get_label(0, (Gdk::ModifierType)action->get_mods());
-			label += Glib::ustring::compose(_("Button %1"), action->get_button());
+			label += Glib::ustring::compose(_(" + Button %1"), action->get_button());
 		}
 		void visit(const Global* action) override {
 			auto t = action->get_action_type();
@@ -1419,6 +1549,27 @@ struct ActionLabel : public ActionVisitor {
 		void visit(const View* action) override {
 			auto t = action->get_action_type();
 			label = View::get_type_str(t);
+		}
+		void visit(const Touchpad* action) override {
+			auto t = action->get_action_type();
+			if(t == Touchpad::Type::NONE) {
+				label = "None";
+				return;
+			}
+			
+			uint32_t mods = action->get_mods();
+			mods = KeyCodes::add_virtual_modifiers(mods);
+			if(mods) label = Gtk::AccelGroup::get_label(0, static_cast<Gdk::ModifierType>(mods)) + " + ";
+			else label = "";
+			
+			if(t == Touchpad::Type::SCROLL) {
+				label += "Scroll";
+				return;
+			}
+			
+			/* Pinch or swipe */
+			if(t == Touchpad::Type::PINCH) label += Glib::ustring::compose(_(" %1 finger pinch"), action->fingers);
+			else label += Glib::ustring::compose(_(" %1 finger swipe"), action->fingers);
 		}
 		void visit(const Plugin* action) override {
 			label = action->get_action();

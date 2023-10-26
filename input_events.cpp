@@ -24,7 +24,6 @@
 extern "C" {
 #include <wlr/backend/headless.h>
 #include <wlr/backend/multi.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
@@ -122,6 +121,106 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
     ev.state = state;
     ev.time_msec = time_msec;
     wl_signal_emit(&(input_pointer->events.button), &ev);
+}
+
+void input_headless::pointer_scroll(uint32_t time_msec, double delta, enum wlr_axis_orientation o) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer scroll event");
+	wlr_pointer_axis_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.source = WLR_AXIS_SOURCE_CONTINUOUS;
+	ev.orientation = o;
+	ev.delta = delta;
+	ev.delta_discrete = delta * WLR_POINTER_AXIS_DISCRETE_STEP;;
+	wl_signal_emit(&(input_pointer->events.axis), &ev);
+}
+
+void input_headless::pointer_start_swipe(uint32_t time_msec, uint32_t fingers) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer swipe begin event");
+	wlr_pointer_swipe_begin_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.fingers = fingers;
+	wl_signal_emit(&(input_pointer->events.swipe_begin), &ev);
+}
+
+void input_headless::pointer_update_swipe(uint32_t time_msec, uint32_t fingers, double dx, double dy) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer swipe update event");
+	wlr_pointer_swipe_update_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.fingers = fingers;
+	ev.dx = dx;
+	ev.dy = dy;
+	wl_signal_emit(&(input_pointer->events.swipe_update), &ev);
+}
+
+void input_headless::pointer_end_swipe(uint32_t time_msec, bool cancelled) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer swipe end event");
+	wlr_pointer_swipe_end_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.cancelled = cancelled; //!! note: conversion from C++ bool to C99/C23 bool !!
+	wl_signal_emit(&(input_pointer->events.swipe_end), &ev);
+}
+
+void input_headless::pointer_start_pinch(uint32_t time_msec, uint32_t fingers) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer pinch begin event");
+	wlr_pointer_pinch_begin_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.fingers = fingers;
+	wl_signal_emit(&(input_pointer->events.pinch_begin), &ev);
+}
+
+void input_headless::pointer_update_pinch(uint32_t time_msec, uint32_t fingers, double dx, double dy, double scale, double rotation) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer pinch update event");
+	wlr_pointer_pinch_update_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.fingers = fingers;
+	ev.dx = dx;
+	ev.dy = dy;
+	ev.scale = scale;
+	ev.rotation = rotation;
+	wl_signal_emit(&(input_pointer->events.pinch_update), &ev);
+}
+
+void input_headless::pointer_end_pinch(uint32_t time_msec, bool cancelled) {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer pinch end event");
+	wlr_pointer_pinch_end_event ev;
+	ev.pointer = input_pointer;
+	ev.time_msec = time_msec;
+	ev.cancelled = cancelled; //!! note: conversion from C++ bool to C99/C23 bool !!
+	wl_signal_emit(&(input_pointer->events.pinch_end), &ev);
 }
 
 void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state) {

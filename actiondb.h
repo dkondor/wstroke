@@ -43,6 +43,7 @@ class Global;
 class View;
 class Plugin;
 class Ranking;
+class Touchpad;
 
 
 class ActionVisitor {
@@ -57,6 +58,7 @@ class ActionVisitor {
 		virtual void visit(const Global* action) = 0;
 		virtual void visit(const View* action) = 0;
 		virtual void visit(const Plugin* action) = 0;
+		virtual void visit(const Touchpad* action) = 0;
 };
 
 class Action {
@@ -152,6 +154,30 @@ public:
 	std::string get_type() const override { return "Scroll"; }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Scroll(*this)); }
+};
+
+class Touchpad : public ModAction {
+	friend class boost::serialization::access;
+public:
+	enum Type { NONE, SCROLL, SWIPE, PINCH };
+	Type type = NONE;
+	uint32_t fingers = 0;
+private:
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
+	template<class Archive> void load(Archive & ar, const unsigned int version);
+	template<class Archive> void save(Archive & ar, const unsigned int version) const;
+	Touchpad(uint32_t mods, uint32_t fingers_, Type t) : ModAction(mods), type(t), fingers(fingers_) {}
+	Touchpad(const Touchpad&) = default;
+public:
+	Touchpad() {}
+	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::PINCH) + 1;
+/*	static const char* types[n_actions];
+	static const char* get_type_str(Type type); */
+	static std::unique_ptr<Action> create(Type t, uint32_t fingers, uint32_t mods) { return std::unique_ptr<Action>(new Touchpad(mods, fingers, t)); }
+	std::string get_type() const override { return "Touchpad"; }
+	Type get_action_type() const { return type; }
+	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
+	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Touchpad(*this)); }
 };
 
 class Ignore : public ModAction {

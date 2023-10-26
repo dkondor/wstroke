@@ -66,6 +66,7 @@ BOOST_CLASS_EXPORT(Misc)
 BOOST_CLASS_EXPORT(Global)
 BOOST_CLASS_EXPORT(View)
 BOOST_CLASS_EXPORT(Plugin)
+BOOST_CLASS_EXPORT(Touchpad)
 
 
 template<class Archive> void Action::serialize(G_GNUC_UNUSED Archive & ar, G_GNUC_UNUSED unsigned int version) {}
@@ -169,6 +170,21 @@ template<class Archive> void View::save(Archive & ar, G_GNUC_UNUSED unsigned int
 	ar & type;
 }
 
+template<class Archive> void Touchpad::load(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+	ar & boost::serialization::base_object<ModAction>(*this);
+	ar & type;
+	/* allow later extensions to add more types that might not be supported in older versions */
+	if((uint32_t)type >= n_actions) type = Type::NONE;
+	ar & fingers;
+}
+
+template<class Archive> void Touchpad::save(Archive & ar, G_GNUC_UNUSED unsigned int version) const {
+	ar & boost::serialization::base_object<ModAction>(*this);
+	ar & type;
+	ar & fingers;
+}
+
+
 class StrokeSet : public std::set<boost::shared_ptr<Stroke>> {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
@@ -200,7 +216,7 @@ template<class Archive> void StrokeInfo::load(Archive & ar, const unsigned int v
 		if(!action && version < 3) {
 			/* convert Scroll and Text actions to Global / None -- they are not supported */
 			Scroll* scroll = dynamic_cast<Scroll*>(action2.get());
-			if(scroll) action = Global::create(Global::Type::NONE);
+			if(scroll) action = Touchpad::create(Touchpad::Type::SCROLL, 2, scroll->get_mods());
 			else {
 				SendText* text = dynamic_cast<SendText*>(action2.get());
 				if(text) action = Global::create(Global::Type::NONE);

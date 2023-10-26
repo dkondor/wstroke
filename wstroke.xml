@@ -4,82 +4,103 @@
 		<_short>Mouse Gestures</_short>
 		<_long>A plugin to identify complex gestures drawn by the mouse and associate them with actions.</_long>
 		<category>Accessibility</category>
-		<option name="initiate" type="button">
-			<_short>Activate</_short>
-			<_long>Mouse button to press for drawing a gesture.</_long>
-			<default>BTN_RIGHT</default>
-		</option>
-		<option name="stroke_color" type="color">
-			<_short>Line color</_short>
-			<_long>Sets the line color for the strokes drawn.</_long>
-			<default>0.7 0.1 0.1 1.0</default>
-		</option>
-		<option name="stroke_width" type="int">
-			<_short>Line width</_short>
-			<_long>Sets the line width for drawing strokes (in pixels).</_long>
-			<default>2</default>
-			<min>0</min>
-		</option>
-		<option name="target_view_mouse" type="bool">
-			<_short>Target the view under the mouse</_short>
-			<_long>If set, the target of the gesture action is the view under the pointer when the gesture is initiated. Otherwise, it is the currently active view.</_long>
-			<default>true</default>
-		</option>
-		<option name="focus_mode" type="string">
-			<_short>Focus the view under the mouse</_short>
-			<_long>Specifies if the view under the mouse should be focused.</_long>
-			<default>no_gesture</default>
-			<desc>
-				<value>never</value>
-				<_name>Never</_name>
-			</desc>
-			<desc>
-				<value>no_gesture</value>
-				<_name>Only on click</_name>
-			</desc>
-			<desc>
-				<value>only_gesture</value>
-				<_name>Only on gesture</_name>
-			</desc>
-			<desc>
-				<value>always</value>
-				<_name>Always</_name>
-			</desc>
-		</option>
-		<option name="start_timeout" type="int">
-			<_short>Start timeout for strokes</_short>
-			<_long>Timeout after a right click to start a stroke. Can be used to generate strokes on touchpads.</_long>
-			<default>0</default>
-		</option>
-		<option name="end_timeout" type="int">
-			<_short>End timeout for strokes</_short>
-			<_long>Use this timeout for ending gestures if they were started with the previous timeout.</_long>
-			<default>0</default>
-		</option>
-		<option name="resize_edges" type="string">
-			<_short>Resize corner</_short>
-			<_long>Specify which corner of a view "Resize" actions are started. Auto means to always use the corner closest to the mouse.</_long>
-			<default>bottom_right</default>
-			<desc>
-				<value>auto</value>
-				<_name>Auto</_name>
-			</desc>
-			<desc>
-				<value>top_left</value>
-				<_name>Top left</_name>
-			</desc>
-			<desc>
-				<value>top_right</value>
-				<_name>Top right</_name>
-			</desc>
-			<desc>
-				<value>bottom_left</value>
-				<_name>Bottom left</_name>
-			</desc>
-			<desc>
-				<value>bottom_right</value>
-				<_name>Bottom right</_name>
-			</desc>
-		</option>
+		<group>
+			<_short>General</_short>
+			<option name="initiate" type="button">
+				<_short>Activate</_short>
+				<_long>Mouse button to press for drawing a gesture.</_long>
+				<default>BTN_RIGHT</default>
+			</option>
+			<option name="stroke_color" type="color">
+				<_short>Line color</_short>
+				<_long>Sets the line color for the strokes drawn.</_long>
+				<default>0.7 0.1 0.1 1.0</default>
+			</option>
+			<option name="stroke_width" type="int">
+				<_short>Line width</_short>
+				<_long>Sets the line width for drawing strokes (in pixels).</_long>
+				<default>2</default>
+				<min>0</min>
+			</option>
+			<option name="target_view_mouse" type="bool">
+				<_short>Target the view under the mouse</_short>
+				<_long>If set, the target of the gesture action is the view under the pointer when the gesture is initiated. Otherwise, it is the currently active view.</_long>
+				<default>true</default>
+			</option>
+			<option name="focus_mode" type="string">
+				<_short>Focus the view under the mouse</_short>
+				<_long>Specifies if the view under the mouse should be focused.</_long>
+				<default>no_gesture</default>
+				<desc>
+					<value>never</value>
+					<_name>Never</_name>
+				</desc>
+				<desc>
+					<value>no_gesture</value>
+					<_name>Only on click</_name>
+				</desc>
+				<desc>
+					<value>only_gesture</value>
+					<_name>Only on gesture</_name>
+				</desc>
+				<desc>
+					<value>always</value>
+					<_name>Always</_name>
+				</desc>
+			</option>
+			<option name="start_timeout" type="int">
+				<_short>Start timeout for strokes</_short>
+				<_long>Timeout after a right click to start a stroke. Can be used to generate strokes on touchpads.</_long>
+				<default>0</default>
+			</option>
+			<option name="end_timeout" type="int">
+				<_short>End timeout for strokes</_short>
+				<_long>Use this timeout for ending gestures if they were started with the previous timeout.</_long>
+				<default>0</default>
+			</option>
+		</group>
+		<group>
+			<_short>Action preferences</_short>
+			<option name="resize_edges" type="string">
+				<_short>Resize corner</_short>
+				<_long>Specify which corner of a view "Resize" actions are started. Auto means to always use the corner closest to the mouse.</_long>
+				<default>bottom_right</default>
+				<desc>
+					<value>auto</value>
+					<_name>Auto</_name>
+				</desc>
+				<desc>
+					<value>top_left</value>
+					<_name>Top left</_name>
+				</desc>
+				<desc>
+					<value>top_right</value>
+					<_name>Top right</_name>
+				</desc>
+				<desc>
+					<value>bottom_left</value>
+					<_name>Bottom left</_name>
+				</desc>
+				<desc>
+					<value>bottom_right</value>
+					<_name>Bottom right</_name>
+				</desc>
+			</option>
+			<option name="touchpad_scroll_sensitivity" type="double">
+				<_short>Touchpad scroll sensitivity</_short>
+				<_long>Specify how sensitive are scroll actions to pointer movements</_long>
+				<default>1.0</default>
+				<precision>0.05</precision>
+				<min>0.05</min>
+			</option>
+			
+			<option name="touchpad_pinch_sensitivity" type="int">
+				<_short>Touchpad pinch sensitivity</_short>
+				<_long>Specify how sensitive are pinch actions to pointer movements</_long>
+				<default>200</default>
+				<precision>10</precision>
+				<min>10</min>
+			</option>
+		</group>
 	</plugin>
 </wayfire>

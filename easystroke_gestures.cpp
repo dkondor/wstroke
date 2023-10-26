@@ -262,6 +262,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		wf::option_wrapper_t<int> start_timeout{"wstroke/start_timeout"};
 		wf::option_wrapper_t<int> end_timeout{"wstroke/end_timeout"};
 		wf::option_wrapper_t<std::string> resize_edges{"wstroke/resize_edges"};
+		wf::option_wrapper_t<double> touchpad_scroll_sensitivity{"wstroke/touchpad_scroll_sensitivity"};
+		wf::option_wrapper_t<int> touchpad_pinch_sensitivity{"wstroke/touchpad_pinch_sensitivity"};
 		
 		std::unique_ptr<wf::input_grab_t> input_grab;
 		wf::plugin_activation_data_t grab_interface{
@@ -290,9 +292,15 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		bool active = false;
 		bool is_gesture = false; /* whether currently processing a gesture */
-		bool pointer_release_next = false; /* set to true at the end of a gesture */
-		/* currentl modifier keys help by the ignore action */
+		/* current modifier keys held by the ignore action */
 		uint32_t ignore_active = 0;
+		
+		/* currently active touchpad action */
+		Touchpad::Type touchpad_active = Touchpad::Type::NONE;
+		double touchpad_last_angle = 0.0; // in radians, compared to the x axis
+		double touchpad_last_scale = 1.0; // last scale sent in a pinch gesture
+		bool next_release_touchpad = false; // if true, do not propagate the next button release event
+		uint32_t touchpad_fingers = 0; // number of fingers in the current touchpad gesture
 		
 		bool ptr_moved = false;
 		wf::wl_timer<false> timeout;
@@ -346,7 +354,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			overlay_node = std::make_shared<ws_node>(output);
 			
 			output->add_button(initiate, &stroke_initiate);
-			wf::get_core().connect(&ignore_button_cb);
+			wf::get_core().connect(&on_raw_pointer_button);
+			wf::get_core().connect(&on_raw_pointer_motion);
 			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
 			
 			input_grab = std::make_unique<wf::input_grab_t>(this->grab_interface.name, output, nullptr, this, nullptr);
@@ -355,7 +364,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		void fini() override {
 			if(active) cancel_stroke();
-			ignore_button_cb.disconnect();
+			on_raw_pointer_button.disconnect();
+			on_raw_pointer_motion.disconnect();
 			// ignore_key_cb.disconnect();
 			output->rem_binding(&stroke_initiate);
 			input.fini();
@@ -417,15 +427,12 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		}
 		void visit(const Ignore* action) override {
 			uint32_t ignore_mods = action->get_mods();
-			uint32_t new_ignore_mods = (ignore_mods ^ ignore_active) & ignore_mods;
-			if(new_ignore_mods || needs_refocus) {
-				set_idle_action([this, new_ignore_mods] () {
-					uint32_t t = wf::get_current_time();
-					keyboard_modifiers(t, new_ignore_mods, WL_KEYBOARD_KEY_STATE_PRESSED);
-					input.keyboard_mods(new_ignore_mods, 0, 0);
-				});
-				ignore_active |= ignore_mods;
-			}
+			set_idle_action([this, ignore_mods] () {
+				uint32_t t = wf::get_current_time();
+				keyboard_modifiers(t, ignore_mods, WL_KEYBOARD_KEY_STATE_PRESSED);
+				input.keyboard_mods(ignore_mods, 0, 0);
+				ignore_active = ignore_mods;
+			});
 		}
 		void visit(const Button* action) override {
 			uint32_t btn = action->get_button();
@@ -537,6 +544,21 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		void visit(const Plugin* action) override {
 			call_plugin(action->get_action(), true);
 		}
+		void visit(const Touchpad* action) override {
+			auto type = action->get_action_type();
+			// needs_refocus = false;
+			uint32_t mods = action->get_mods();
+			uint32_t fingers = action->fingers;
+			set_idle_action([this, type, mods, fingers] () {
+				if(mods) {
+					uint32_t t = wf::get_current_time();
+					keyboard_modifiers(t, mods, WL_KEYBOARD_KEY_STATE_PRESSED);
+					input.keyboard_mods(mods, 0, 0);
+					ignore_active = mods;
+				}
+				start_touchpad(type, fingers, wf::get_current_time());
+			});
+		}
 	
 	protected:
 		
@@ -633,6 +655,10 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				LOGW("already active!");
 				return false;
 			}
+			
+			/* note: end any previously running stroke action */
+			end_touchpad();
+			end_ignore();
 			
 			initial_active_view = wf::get_core().seat->get_active_view();
 			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
@@ -742,7 +768,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					set_idle_action([](){});
 				else if(!needs_refocus2) view_unmapped.disconnect();
 				is_gesture = false;
-				pointer_release_next = true;
 			}
 			else {
 				/* Generate a "fake" mouse click to pass on to the view
@@ -800,18 +825,123 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			}
 		}}; */
 		
-		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>> ignore_button_cb =
-			[=] (wf::input_event_signal<wlr_pointer_button_event> *ev) {
-			if(ev->event->state == WLR_BUTTON_RELEASED) {
-				if(pointer_release_next) pointer_release_next = false;
-				else end_ignore();
+		void start_touchpad(Touchpad::Type type, uint32_t fingers, uint32_t time_msec) {
+			touchpad_fingers = fingers;
+			switch(type) {
+				case Touchpad::Type::SWIPE:
+					input.pointer_start_swipe(time_msec, touchpad_fingers);
+					break;
+				case Touchpad::Type::PINCH:
+					input.pointer_start_pinch(time_msec, touchpad_fingers);
+					touchpad_last_angle = -1.0 * M_PI / 2.0;
+					touchpad_last_scale = 1.0;
+					break;
+				case Touchpad::Type::NONE:
+				case Touchpad::Type::SCROLL:
+					/* Note: no action needed for SCROLL */
+					break;
 			}
+			touchpad_active = type;
+		}
+		
+		void end_touchpad(bool cancelled = false) {
+			switch(touchpad_active) {
+				case Touchpad::Type::SWIPE:
+					input.pointer_end_swipe(wf::get_current_time(), cancelled);
+					break;
+				case Touchpad::Type::PINCH:
+					input.pointer_end_pinch(wf::get_current_time(), cancelled);
+					break;
+				case Touchpad::Type::NONE:
+				case Touchpad::Type::SCROLL:
+					/* Note: no action needed for SCROLL */
+					break;
+			}
+			touchpad_active = Touchpad::Type::NONE;
+		}
+		
+		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>> on_raw_pointer_button =
+				[=] (wf::input_event_signal<wlr_pointer_button_event> *ev) {
+			if(ev->event->state == WLR_BUTTON_PRESSED) {
+				if(touchpad_active != Touchpad::Type::NONE) {
+					next_release_touchpad = true;
+					ev->mode = wf::input_event_processing_mode_t::IGNORE;
+				}
+			}
+			if(ev->event->state == WLR_BUTTON_RELEASED) {
+				if(next_release_touchpad) {
+					ev->mode = wf::input_event_processing_mode_t::IGNORE;
+					next_release_touchpad = false;
+				}
+				end_touchpad();
+				end_ignore();
+			}
+		};
+		
+		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_motion_event>> on_raw_pointer_motion =
+			[=] (wf::input_event_signal<wlr_pointer_motion_event> *ev) {
+			switch(touchpad_active) {
+				case Touchpad::Type::NONE:
+					return;
+				case Touchpad::Type::SCROLL:
+					{
+						LOGD("Scroll event, dx: ", ev->event->delta_x, ", dy: ", ev->event->delta_y);
+						double delta;
+						enum wlr_axis_orientation o;
+						if(std::abs(ev->event->delta_x) > std::abs(ev->event->delta_y)) {
+							delta = ev->event->delta_x;
+							o = wlr_axis_orientation::WLR_AXIS_ORIENTATION_HORIZONTAL;
+						}
+						else {
+							delta = ev->event->delta_y;
+							o = wlr_axis_orientation::WLR_AXIS_ORIENTATION_VERTICAL;
+						}
+						input.pointer_scroll(ev->event->time_msec + 1, 0.2 * delta * touchpad_scroll_sensitivity, o);
+					}
+					break;
+				case Touchpad::Type::SWIPE:
+					input.pointer_update_swipe(ev->event->time_msec + 1, touchpad_fingers, ev->event->delta_x, ev->event->delta_y);
+					break;
+				case Touchpad::Type::PINCH:
+					{
+						int tmp = touchpad_pinch_sensitivity;
+						double sensitivity = tmp > 0 ? tmp : 200.0;
+						/* TODO: process angles in a reliable way (so far, it does not work, so we just do zoom based on y-coordinates)
+						wf::pointf_t last_pos = {sensitivity * std::cos(touchpad_last_angle), sensitivity * std::sin(touchpad_last_angle)};
+						wf::pointf_t new_pos = last_pos;
+						new_pos.x += ev->event->delta_x;
+						new_pos.y += ev->event->delta_y;
+						double new_angle = std::atan2(new_pos.y, new_pos.x);
+						double angle_diff = touchpad_last_angle - new_angle;
+						if(new_pos.x < 0.0 && last_pos.x < 0.0) {
+							if(new_angle < 0.0 && touchpad_last_angle > 0.0) angle_diff -= 2.0 * M_PI;
+							else if(new_angle > 0.0 && touchpad_last_angle < 0.0) angle_diff += 2.0 * M_PI;
+						}
+						double delta_angle_diff = std::abs(last_pos.x * ev->event->delta_x + last_pos.y * ev->event->delta_y) /
+							(sensitivity * std::hypot(ev->event->delta_x, ev->event->delta_y));
+						if(delta_angle_diff < 0.5) angle_diff = 0.0;
+						else touchpad_last_angle = new_angle;
+						double scale_factor = (delta_angle_diff > 0.5) ? std::hypot(new_pos.x, new_pos.y) / sensitivity : 1.0;
+						touchpad_last_scale *= scale_factor;
+						input.pointer_update_pinch(time_msec, 2, 0.0, 0.0, touchpad_last_scale, -180.0 * angle_diff / M_PI);
+						*/
+						double scale_factor = (sensitivity - ev->event->delta_y) / sensitivity;
+						if(scale_factor > 0.0) {
+							touchpad_last_scale *= scale_factor;
+							uint32_t time_msec = ev->event->time_msec + 1;
+							input.pointer_update_pinch(time_msec, touchpad_fingers, 0.0, 0.0, touchpad_last_scale, 0.0);
+						}
+					}
+					break;
+			}
+			ev->mode = wf::input_event_processing_mode_t::IGNORE;
 		};
 		
 		/* callback to cancel a stroke */
 		void cancel_stroke() {
 			input_grab->ungrab_input();
 			output->deactivate_plugin(&grab_interface);
+			end_touchpad(true);
 			end_ignore();
 			ps.clear();
 			if(is_gesture) {

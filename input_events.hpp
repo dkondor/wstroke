@@ -24,6 +24,7 @@
 extern "C" {
 #include <wlr/backend.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_pointer.h>
 #include <wayland-server-protocol.h>
 }
 
@@ -37,6 +38,16 @@ class input_headless {
 		void fini();
 		/* emit a mouse button event */
 		void pointer_button(uint32_t time_msec, uint32_t button, enum wlr_button_state state);
+		/* emit a pointer scroll event */
+		void pointer_scroll(uint32_t time_msec, double delta, enum wlr_axis_orientation o);
+		/* emit a sequence of swipe events */
+		void pointer_start_swipe(uint32_t time_msec, uint32_t fingers);
+		void pointer_update_swipe(uint32_t time_msec, uint32_t fingers, double dx, double dy);
+		void pointer_end_swipe(uint32_t time_msec, bool cancelled);
+		/* emit a sequence of pinch events */
+		void pointer_start_pinch(uint32_t time_msec, uint32_t fingers);
+		void pointer_update_pinch(uint32_t time_msec, uint32_t fingers, double dx, double dy, double scale, double rotation);
+		void pointer_end_pinch(uint32_t time_msec, bool cancelled);
 		/* emit a keyboard event */
 		void keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state);
 		/* modify the modifier state of the keyboard */

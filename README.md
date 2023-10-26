@@ -6,13 +6,13 @@ Note: this branch requires a recent version of Wayfire and wlroots (see below). 
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) a recent git version from the 0.8.0 branch, at least commit [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337) (see below for compiling for older Wayfire versions)
+ - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) (see below for compiling for older Wayfire versions)
  - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
- - Optionally [libinput](https://www.freedesktop.org/wiki/Software/libinput/) version [1.70](https://lists.freedesktop.org/archives/wayland-devel/2021-February/041733.html) or higher for improved touchpad support (to allow tap-and-drag for the right and middle buttons, required for drawing gestures without physical buttons)
+ - Optionally [libinput](https://www.freedesktop.org/wiki/Software/libinput/) version [1.17](https://lists.freedesktop.org/archives/wayland-devel/2021-February/041733.html) or higher for improved touchpad support (to allow tap-and-drag for the right and middle buttons, required for drawing gestures without physical buttons)
 
 ### Building and installing
 
@@ -54,12 +54,13 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
 ### What works
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
- - Drawing and recognizing stokes.
+ - Drawing and recognizing strokes.
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
  - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly), only supported for some plugins, see [here](https://github.com/WayfireWM/wayfire/issues/1811).
  - Generating keypresses ("Key" action).
  - Generating mouse clicks ("Button" action).
  - Generating modifiers ("Ignore" action -- only works in combination with mouse clicks, not the keyboard).
+ - Emulating touchpad "gestures" with mouse movement, such as scrolling or pinch zoom in apps that support it ("Touchpad Gesture" action; "Scroll" action from Easystroke will be converted to this).
  - Running commands as a gesture action.
  - Getting keybindings and mouse button bindings in the configuration for actions.
  - Recording strokes (slight change: these have to be recorded on a "canvas", cannot be drawn anywhere like with Easystroke; also, recording strokes requires using a different mouse button).
@@ -70,7 +71,6 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  
 ### What does not work
 
- - Scroll action (removed from settings, will be converted to Global)
  - SendText action (removed from settings, will be converted to Global)
  - Ignore in combination with keyboard keypresses.
  - Individual settings (which button, timeout) for each pointing device

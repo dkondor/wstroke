@@ -338,7 +338,6 @@ bool ActionDB::read(const std::string& config_file_name, bool readonly) {
 	if(!std::filesystem::exists(config_file_name)) return false;
 	if(!std::filesystem::is_regular_file(config_file_name)) return false;
 	std::ifstream ifs(config_file_name.c_str(), std::ios::binary);
-	if(ifs.fail()) return false;
 	boost::archive::text_iarchive ia(ifs);
 	ia >> *this;
 	return true;

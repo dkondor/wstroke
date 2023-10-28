@@ -35,7 +35,7 @@ public:
 
 class Actions {
 	public:
-		Actions(ActionDB& actions_, const std::string& config_dir_);
+		Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_, Gtk::Dialog* message_dialog = nullptr);
 	private:
 		void on_button_delete();
 		void on_button_new();

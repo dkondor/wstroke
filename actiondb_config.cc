@@ -45,12 +45,12 @@ template<class Archive> void ActionDB::save(Archive & ar, G_GNUC_UNUSED unsigned
 	ar & stroke_map;
 }
 
-void ActionDB::write(const std::string& config_file_name) {
+void ActionDB::write(const std::string& config_file_name) const {
 	if(!next_id) throw std::runtime_error("ActionDB::write(): missing information!\n");
 	std::string tmp = config_file_name + ".tmp";
 	std::ofstream ofs(tmp.c_str());
 	boost::archive::text_oarchive oa(ofs);
-	oa << (const ActionDB &)(*this);
+	oa << *this;
 	ofs.close();
 	if (rename(tmp.c_str(), config_file_name.c_str()))
 		throw std::runtime_error(_("rename() failed"));

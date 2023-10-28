@@ -171,8 +171,6 @@ private:
 public:
 	Touchpad() {}
 	static constexpr uint32_t n_actions = static_cast<uint32_t>(Type::PINCH) + 1;
-/*	static const char* types[n_actions];
-	static const char* get_type_str(Type type); */
 	static std::unique_ptr<Action> create(Type t, uint32_t fingers, uint32_t mods) { return std::unique_ptr<Action>(new Touchpad(mods, fingers, t)); }
 	std::string get_type() const override { return "Touchpad"; }
 	Type get_action_type() const { return type; }
@@ -494,14 +492,12 @@ public:
 	/******************************************************************
 	 * Input / output                                                 */
 	
-	/* try to read actions from the given config file
-	 * returns false if no config file found, throws an exception
-	 * on other errors
-	 * Note: call this function only once for an ActionDB */
+	/* Try to read actions from the given config file. Returns false if
+	 * no config file found, throws an exception on other errors.
+	 * Note: this will clear any existing actions first. */
 	bool read(const std::string& config_file_name, bool readonly = false);
-	/* try to save actions to the config file
-	 * throws exception on failure */
-	void write(const std::string& config_file_name);
+	/* Try to save actions to the config file; throws exception on failure. */
+	void write(const std::string& config_file_name) const;
 	/* During read(), the version of the archive is stored. It can be retrieved here
 	 * and used to decide if a conversion from an older took place during loading. */
 	unsigned int get_read_version() const { return read_version; }

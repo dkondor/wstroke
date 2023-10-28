@@ -25,6 +25,7 @@
 #include <glibmm/i18n.h>
 #include <string>
 #include <filesystem>
+#include <random>
 #include "actions.h"
 #include "actiondb.h"
 #include "ecres.h"
@@ -36,6 +37,26 @@ static void error_dialog(const Glib::ustring &text) {
 	Gtk::MessageDialog dialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	dialog.show();
 	dialog.run();
+}
+
+/* Display a dialog with an error text if the configuration cannot be read. */
+bool config_error_dialog(const Glib::ustring& fn, const Glib::ustring& err, Gtk::Builder* widgets) {
+	std::unique_ptr<Gtk::Dialog> dialog;
+	{
+		Gtk::Dialog* tmp;
+		widgets->get_widget("dialog_config_error", tmp);
+		dialog.reset(tmp);
+	}
+	
+	Glib::ustring msg = Glib::ustring::compose(_("The gesture configuration file \"%1\" exists but cannot be read. The following error was encountered:"), fn);
+	Gtk::Label* label;
+	Gtk::TextView* tv;
+	widgets->get_widget("label_config_error", label);
+	widgets->get_widget("textview_config_error", tv);
+	tv->get_buffer()->set_text(err);
+	label->set_text(msg);
+	dialog->show();
+	return (dialog->run() == 1); // note: response == 1 means that user clicked on the "Overwrite" button
 }
 
 
@@ -74,16 +95,51 @@ int main(int argc, char **argv)
 		}
 	}
 	
+	Glib::RefPtr<Gtk::Builder> widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
+	
 	ActionDB actions_db;
 	bool config_read;
+	std::string config_err_msg;
+	std::string easystroke_convert_msg;
+	std::string keycode_err_msg;
+	
 	for(const char* const * x = ActionDB::wstroke_actions_versions; *x; ++x) {
+		std::string fn = config_dir + *x;
 		try {
-			config_read = actions_db.read(config_dir + *x);
+			config_read = actions_db.read(fn);
 		}
 		catch(std::exception& e) {
 			fprintf(stderr, "%s\n", e.what());
 			config_read = false;
 			actions_db.clear();
+			
+			if(x == ActionDB::wstroke_actions_versions) {
+				/* In this case, the error is with reading the current config
+				 * (which would be overwritten by us). Signal an error to the user */
+				if(!config_error_dialog(fn, e.what(), widgets.get())) return 1;
+				
+				/* move the configuration file -- try to assign a new filename
+				 * in a naive way (we assume that there is no gain from TOCTOU
+				 * attacks here :) */
+				std::string new_fn = fn;
+				new_fn += ".bak";
+				if(std::filesystem::exists(new_fn, ec)) {
+					std::default_random_engine rng(time(0));
+					std::uniform_int_distribution<unsigned int> dd(1, 999999);
+					new_fn += "-";
+					while(true) {
+						std::string tmp;
+						tmp = new_fn + std::to_string(dd(rng));
+						if(!std::filesystem::exists(tmp, ec)) {
+							new_fn = tmp;
+							break;
+						}
+					}
+				}
+				rename(fn.c_str(), new_fn.c_str());
+				fprintf(stderr, "Moved unreadable config file to new location: %s\n", new_fn.c_str());
+				config_err_msg = "Created a backup of the previous, unreadable config file here:\n" + new_fn;
+			}
 		}
 		if(config_read) break;
 	}
@@ -91,15 +147,20 @@ int main(int argc, char **argv)
 		if(std::filesystem::exists(old_config_dir, ec) && std::filesystem::is_directory(old_config_dir, ec)) {
 			KeyCodes::keycode_errors = 0;
 			for(const char* const * x = ActionDB::easystroke_actions_versions; *x; ++x) {
+				std::string fn = old_config_dir + *x;
 				try {
-					config_read = actions_db.read(old_config_dir + *x);
+					config_read = actions_db.read(fn);
 				}
 				catch(std::exception& e) {
 					fprintf(stderr, "%s\n", e.what());
 					config_read = false;
 					actions_db.clear();
 				}
-				if(config_read) break;
+				if(config_read) {
+					easystroke_convert_msg = "Imported gestures from Easystroke's configuration:\n" + fn;
+					easystroke_convert_msg += "\nPlease check that all actions were interpreted correctly.";
+					break;
+				}
 			}
 		}
 		if(!config_read) {
@@ -111,11 +172,19 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	if(KeyCodes::keycode_errors) error_dialog(_("Could not convert some keycodes. "
-				"Some Key actions have missing values"));
+	if(KeyCodes::keycode_errors) keycode_err_msg =  _("Could not convert some keycodes. "
+				"Some Key actions have missing values");
 	
+	Gtk::Dialog* d = nullptr;
+	if(!(keycode_err_msg.empty() && easystroke_convert_msg.empty() && config_err_msg.empty())) {
+		std::string text;
+		if(!config_err_msg.empty()) text += (config_err_msg + "\n\n");
+		if(!easystroke_convert_msg.empty()) text += (easystroke_convert_msg + "\n\n");
+		if(!keycode_err_msg.empty()) text += (keycode_err_msg + "\n\n");
+		d = new Gtk::MessageDialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+	}
 	
-	Actions actions(actions_db, config_dir);
+	Actions actions(actions_db, config_dir, widgets, d);
 	
 	if(!input_inhibitor_init())
 		fprintf(stderr, _("Could not initialize keyboard grabber interface. Assigning key combinations might not work.\n"));

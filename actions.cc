@@ -170,10 +170,11 @@ static void on_actions_editing_started(GtkCellRenderer *, GtkCellEditable *edita
 	((Actions *)data)->on_arg_editing_started(editable, path);
 }
 
-Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
+Actions::Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_, Gtk::Dialog* message_dialog) :
 	apps_view(0),
 	editing_new(false),
 	editing(false),
+	widgets(widgets_),
 	action_list(actions_.get_root()),
 	actions(actions_),
 	config_dir(config_dir_),
@@ -182,11 +183,19 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_) :
 	exiting(false),
 	save_error(false)
 {
-	widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
 	{
 		Gtk::Window* tmp = nullptr;
 		widgets->get_widget("main", tmp);
 		main_win.reset(tmp);
+		if(message_dialog) {
+			message_dialog->set_transient_for(*main_win);
+			message_dialog->set_modal(true);
+			main_win->signal_show().connect([message_dialog]() {
+				message_dialog->show();
+				message_dialog->run();
+				delete message_dialog;
+			});
+		}
 	}
 	
 	Gtk::ScrolledWindow *sw;

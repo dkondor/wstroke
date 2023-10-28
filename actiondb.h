@@ -558,8 +558,9 @@ public:
 	template<class it>
 	void move_strokes(it&& begin, it&& end, stroke_id before, bool after);
 	
-	/* Move strokes between apps / groups */
-	void move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id);
+	/* Move or copy strokes between apps / groups. Returns if the stroke
+	 * was removed from src. */
+	bool move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id);
 	
 	void clear() { *this = ActionDB(); }
 	

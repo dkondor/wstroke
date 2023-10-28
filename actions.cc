@@ -174,8 +174,8 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPt
 	apps_view(0),
 	editing_new(false),
 	editing(false),
-	widgets(widgets_),
 	action_list(actions_.get_root()),
+	widgets(widgets_),
 	actions(actions_),
 	config_dir(config_dir_),
 	timeout(Glib::TimeoutSource::create(5000)),
@@ -656,26 +656,34 @@ bool Actions::AppsStore::drag_data_received_vfunc(const Gtk::TreeModel::Path &de
 		return false;
 	Glib::RefPtr<Gtk::TreeSelection> sel = parent->tv.get_selection();
 	if (sel->count_selected_rows() > 1) {
+		/* we temporarily unset soring so as not to resort the list every
+		 * time an item is removed */
+		int col;
+		Gtk::SortType sort;
+		parent->tm->get_sort_column_id(col, sort);
+		parent->tm->set_sort_column(GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, sort);
+		
 		std::vector<Gtk::TreePath> paths = sel->get_selected_rows();
 		std::vector<Gtk::TreeRowReference> refs;
-		std::vector<stroke_id> ids;
-		for(const auto& x : paths) {
+		for(const auto& x : paths)
 			refs.push_back(Gtk::TreeRowReference(parent->tm, x));
-			ids.push_back((*parent->tm->get_iter(x))[parent->cols.id]);
-		}
+		
 		for(const auto& x : refs) {
 			Gtk::TreeIter i = parent->tm->get_iter(x.get_path());
-			parent->tm->erase(i);
+			stroke_id id = (*i)[parent->cols.id];
+			if(parent->actions.move_stroke_to_app(parent->action_list, actions, id))
+				parent->tm->erase(i);
+			else parent->update_row(*i);
 		}
 		
-		for (auto id : ids) parent->actions.move_stroke_to_app(parent->action_list, actions, id);
+		parent->tm->set_sort_column(col, sort);
 	}
 	else {
 		auto i = parent->tm->get_iter(src);
-		// auto i = tm->get_iter(*paths.begin());
 		stroke_id src_id = (*i)[parent->cols.id];
-		parent->tm->erase(i);
-		parent->actions.move_stroke_to_app(parent->action_list, actions, src_id);
+		if(parent->actions.move_stroke_to_app(parent->action_list, actions, src_id))
+			parent->tm->erase(i);
+		else parent->update_row(*i);
 	}
 	
 	// parent->update_action_list();
@@ -1066,6 +1074,7 @@ void Actions::update_row(const Gtk::TreeRow &row) {
 	row[cols.deactivated] = si.deleted;
 	row[cols.name_bold] = si.name_overwrite;
 	row[cols.action_bold] = si.action_overwrite;
+	button_reset_actions->set_sensitive(si.stroke_overwrite || si.deleted || si.name_overwrite || si.action_overwrite);
 }
 
 class Actions::OnStroke {
@@ -1180,25 +1189,38 @@ void Actions::focus(stroke_id id, int col, bool edit) {
 
 void Actions::on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text) {
 	Gtk::TreeRow row(*tm->get_iter(path));
-	action_list->set_name(row[cols.id], new_text);
-	update_actions();
-	update_row(row);
+	StrokeRow si = action_list->get_info(row[cols.id], false);
+	if(new_text != *si.name) {
+		action_list->set_name(row[cols.id], new_text);
+		update_actions();
+		update_row(row);
+	}
 	focus(row[cols.id], 2, editing_new);
 }
 
 void Actions::on_text_edited(const gchar *path, const gchar *new_text) {
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
+	bool changed = true;
+	const Action* action = action_list->get_info(row[cols.id]).action;
 	if (type == Type::COMMAND) {
-		action_list->set_action(row[cols.id], Command::create(new_text));
+		auto cmd = dynamic_cast<const Command*>(action);
+		if(cmd && new_text != cmd->get_cmd()) action_list->set_action(row[cols.id], Command::create(new_text));
+		else changed = false;
 	} else if (type == Type::TEXT) {
-		action_list->set_action(row[cols.id], SendText::create(new_text));
+		auto text = dynamic_cast<const SendText*>(action);
+		if(text && new_text != text->get_text()) action_list->set_action(row[cols.id], SendText::create(new_text));
+		else changed = false;
 	} else if (type == Type::PLUGIN) {
-		action_list->set_action(row[cols.id], Plugin::create(new_text));
+		auto plugin = dynamic_cast<const Plugin*>(action);
+		if(plugin && new_text != plugin->get_action()) action_list->set_action(row[cols.id], Plugin::create(new_text));
+		else changed = false;
 	}
 	else return;
-	update_row(row);
-	update_actions();
+	if(changed) {
+		update_row(row);
+		update_actions();
+	}
 }
 
 void Actions::on_accel_edited(const gchar *path_string, guint accel_key, GdkModifierType mods) {

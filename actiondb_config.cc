@@ -265,46 +265,149 @@ template void ActionDB::move_strokes<std::vector<stroke_id>::iterator>(std::vect
 template void ActionDB::move_strokes<std::vector<stroke_id>::reverse_iterator>(std::vector<stroke_id>::reverse_iterator&& begin, std::vector<stroke_id>::reverse_iterator&& end, stroke_id before, bool after);
 
 
-void ActionDB::move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id) {
-	if(src == dst) return;
-	if(!src->contains(id)) return;
+bool ActionDB::move_stroke_to_app(ActionListDiff<false>* src, ActionListDiff<false>* dst, stroke_id id) {
+	if(src == dst) return false;
+	if(!src->contains(id)) return false;
 	
 	/* Main cases:
-	 *  1. if ID is owned by src, it is moved to dst, handling special cases when they are in the same tree
-	 *  2. if it is not owned, it is marked as deleted in src, and
-	 *   2.1. added as an override in dst if its parent tree contains it
-	 *   2.2. copied to dst if the two nodes are "independent"
+	 *  1. src is the ancestor of dst or vice versa -> we move all information from src to dst
+	 * 		(note: this might affect other descendants of src, and also potentially overwrites any
+	 * 		information already at dst)
+	 *  2. src and dst are "independent" -> in this case, we make a copy (potentially overwriting
+	 * 		any information in dst)
+	 *  In either cases, the goal is to make dst look exactly like src was.
 	 */
-	if(stroke_map.at(id).second == src) {
-		dst->deleted.erase(id);
-		dst->added[id] = std::move(src->added.at(id));
-		auto parent = src->parent;
-		while(parent && parent != dst) parent = parent->parent;
-		if(parent == dst) src->added.erase(id);
-		else src->remove(id, true, dst);
-		stroke_map.at(id).second = dst;
-	}
-	else {
-		if(dst->contains(id) || dst->deleted.count(id)) {
-			/* already contains this, we only need to move any "overrides" */
-			auto it = src->added.find(id);
-			if(it != src->added.end()) dst->added[id] = std::move(it->second);
-			else dst->added.erase(id);
-			dst->deleted.erase(id);
-			
-			//!! TODO: handle more complex cases (e.g. being in the same tree), might need to copy !!
+	
+	auto parent = src->parent;
+	while(parent && parent != dst) parent = parent->parent;
+	if(parent == dst) {
+		/* dst is the parent of src */
+		if(stroke_map.at(id).second == src) {
+			/* simple case, just move everything */
+			dst->added[id] = std::move(src->added.at(id));
+			src->added.erase(id);
+			stroke_map.at(id).second = dst;
 		}
 		else {
-			/* "independent", or disabled in one of the parents
-			 * we create a copy */
-			StrokeRow r = src->get_info(id, false);
+			/* move any properties that are overridden in src or in any of its parents */
 			StrokeInfo info;
-			info.name = *r.name;
-			if(r.action) info.action = r.action->clone();
-			info.stroke = r.stroke->clone();
-			add_stroke(dst, std::move(info));
+			auto tmp = src;
+			bool change_owner = false;
+			do {
+				auto it = tmp->added.find(id);
+				if(it != tmp->added.end()) {
+					if(stroke_map.at(id).second == tmp) change_owner = true;
+					bool erase = true;
+					if(!it->second.stroke.trivial()) {
+						if(info.stroke.trivial()) info.stroke = std::move(it->second.stroke);
+						else erase = false;
+					}
+					if(it->second.name != "") {
+						if(info.name == "") info.name = std::move(it->second.name);
+						else erase = false;
+					}
+					if(it->second.action) {
+						if(!info.action) info.action = std::move(it->second.action);
+						else erase = false;
+					}
+					if(erase) tmp->added.erase(it);
+				}
+				tmp = tmp->parent;
+			} while(tmp != dst);
+			StrokeInfo& di = dst->added[id]; // this might add a new element to dst->added
+			if(!info.stroke.trivial()) di.stroke = std::move(info.stroke);
+			if(info.name != "") di.name = std::move(info.name);
+			if(info.action) di.action = std::move(info.action);
+			if(change_owner) stroke_map.at(id).second = dst;
+		}
+		return false;
+	}
+	
+	parent = dst->parent;
+	while(parent && parent != src) parent = parent->parent;
+	if(parent == src) {
+		/* src is the parent of dst */
+		if(stroke_map.at(id).second == src) {
+			/* simple case, just move down everything */
+			dst->added[id] = std::move(src->added.at(id));
+			src->remove(id, true, dst);
+			stroke_map.at(id).second = dst;
+			return true;
+		}
+		else {
+			/* check if the stroke is deleted in any of dst's ancestors
+			 * (if yes, we will copy this stroke) */
+			bool deleted = false;
+			auto tmp = dst->parent;
+			while(tmp != src) if(tmp->deleted.count(id)) {
+				deleted = true;
+				break;
+			}
+			
+			if(!deleted) {
+				StrokeRow r = src->get_info(id, false);
+				StrokeInfo& info = dst->added[id];
+				auto it = src->added.find(id);
+				if(it != src->added.end()) {
+					info = std::move(it->second);
+					src->added.erase(it);
+				}
+				// we need to copy all things from r that are
+				// (1) not already in info; and (2) overridden between src and dst
+				bool copy_stroke = false;
+				bool copy_name = false;
+				bool copy_action = false;
+				tmp = dst->parent;
+				while(tmp != src) {
+					auto it2 = tmp->added.find(id);
+					if(!it2->second.stroke.trivial()) copy_stroke = true;
+					if(it2->second.name != "") copy_name = true;
+					if(it2->second.action) copy_action = true;
+				}
+				if(copy_stroke && info.stroke.trivial()) info.stroke = r.stroke->clone();
+				if(copy_name && info.name == "") info.name = *r.name;
+				if(copy_action && !info.action) info.action = r.action->clone();
+				dst->deleted.erase(id);
+				return false;
+			}
 		}
 	}
+	
+	/* Here, dst and src are "unrelated": we need to copy all the info or
+	 * the whole stroke to dst */
+	dst->deleted.erase(id);
+	if(dst->contains(id)) {
+		/* This ID is already present, we need to copy parts of the info which
+		 * are not already the same. */
+		StrokeRow rsrc = src->get_info(id, false);
+		StrokeRow rdst = dst->get_info(id, false);
+		StrokeInfo* info = nullptr;
+		/* Note: members of rsrc and rdst are pointers to the actual objects
+		 * which contain the relevant info; these can be used to compare if
+		 * anything needs to be copied. */
+		if(rsrc.stroke != rdst.stroke) {
+			if(!info) info = &(dst->added[id]);
+			info->stroke = rsrc.stroke->clone();
+		}
+		if(rsrc.name != rdst.name) {
+			if(!info) info = &(dst->added[id]);
+			info->name = *rsrc.name;
+		}
+		if(rsrc.action != rdst.action) {
+			if(!info) info = &(dst->added[id]);
+			info->action = rsrc.action->clone();
+		}
+	}
+	else {
+		// we copy the whole stroke
+		StrokeRow r = src->get_info(id, false);
+		StrokeInfo info;
+		info.name = *r.name;
+		info.action = r.action->clone();
+		info.stroke = r.stroke->clone();
+		add_stroke(dst, std::move(info));
+	}
+	return false;
 }
 
 void ActionDB::merge_actions_r(ActionListDiff<false>* dst, ActionListDiff<false>* src, std::unordered_map<stroke_id, stroke_id>& id_map) {

@@ -940,8 +940,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
           </packing>
         </child>
         <child>
-          <object class="GtkRadioButton" id="import_add">
-            <property name="label" translatable="yes">Add to the existing gestures</property>
+          <object class="GtkRadioButton" id="import_overwrite">
+            <property name="label" translatable="yes">Replace the current set of gestures</property>
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
@@ -955,13 +955,13 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
           </packing>
         </child>
         <child>
-          <object class="GtkRadioButton" id="import_overwrite">
-            <property name="label" translatable="yes">Replace the current set of gestures</property>
+          <object class="GtkRadioButton" id="import_add">
+            <property name="label" translatable="yes">Add to the existing gestures</property>
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
             <property name="draw-indicator">True</property>
-            <property name="group">import_add</property>
+            <property name="group">import_overwrite</property>
           </object>
           <packing>
             <property name="expand">False</property>

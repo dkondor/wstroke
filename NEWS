@@ -1,0 +1,12 @@
+2.0
+=========
+* Refactor internal storage and clean code
+* Gestures can be freely reordered
+* Fix issues related to the display of apps and groups
+* Slight updates to the GUI
+* Add "Touchpad Gesture" action (including the "Scroll" action from Easystroke)
+* Add the possibility to import / export the gesture configuration
+
+1.0
+=========
+* Original release, most features work

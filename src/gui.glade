@@ -524,7 +524,7 @@
     <property name="type-hint">dialog</property>
     <property name="transient-for">main</property>
     <property name="program-name">WStroke</property>
-    <property name="version">1.0</property>
+    <property name="version">2.0</property>
     <property name="copyright" translatable="yes">
 Copyright (c) 2020-2023, Daniel Kondor &lt;kondor.dani@gmail.com&gt;
 Copyright (c) 2008-2016, Thomas Jaeger &lt;ThJaeger@gmail.com&gt;

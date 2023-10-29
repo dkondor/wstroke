@@ -40,7 +40,7 @@ Basic options such as the button used for gestures, or the target of gestures ca
 
 Gestures can be configured by the standalone program `wstroke-config`. Recommended ways to obtain an initial configuration:
  - If you have Easystroke installed, `wstroke-config` will attempt to import gestures from it, by looking for any of the `actions*` files under `~/.easystroke`. Even without Easystroke installed, copying the content of this directory from a previous installation can be used to import gestures. It is recommended to check that importing is done correctly.
- - An example configuration file is under [example/actions-wstroke](example/actions-wstroke). This is installed automatically and will be used by `wstroke-config` as default if no other configuration exists. You can copy this file to `~/.config/wstroke` manually as well.
+ - An example configuration file is under [example/actions-wstroke-2](example/actions-wstroke-2). This is installed automatically and will be used by `wstroke-config` as default if no other configuration exists. You can copy this file to `~/.config/wstroke` manually as well.
 
 Gestures are stored under `wstroke/actions-wstroke-2` in the directory given by the `XDG_CONFIG_HOME` environment variable (`~/.config` by default). It is recommended not to edit this file manually, but it can be copied between different computers, or backed up and restored manually.
 

@@ -46,59 +46,7 @@ extern "C"
 #include <iostream>
 #include "gesture.h"
 #include "actiondb.h"
-
 #include "input_events.hpp"
-
-template<>
-const std::string& ActionListDiff<false>::get_stroke_name(unique_t id) const {
-	auto it = added.find(id);
-	if(it != added.end() && it->second.name != "") return it->second.name;
-	//!! TODO: check for non-null parent ??
-	return parent->get_stroke_name(id);
-}
-
-template<>
-std::map<stroke_id, const Stroke*> ActionListDiff<false>::get_strokes() const {
-	std::map<stroke_id, const Stroke*> strokes = parent ? parent->get_strokes() : std::map<stroke_id, const Stroke*>();
-	for(const auto& x : deleted) strokes.erase(x);
-	for(const auto& x : added) if(!x.second.stroke.trivial()) strokes[x.first] = &x.second.stroke;
-	return strokes;
-}
-
-template<>
-Action* ActionListDiff<false>::handle(const Stroke& s, Ranking* r) const {
-	double best_score = 0.0;
-	Action* ret = nullptr;
-	if(r) r->stroke = &s;
-	const auto strokes = get_strokes();
-	for(const auto& x : strokes) {
-		const Stroke& y = *x.second;
-		double score;
-		int match = Stroke::compare(s, y, score);
-		if (match < 0)
-			continue;
-		bool new_best = false;
-		if(score > best_score) {
-			new_best = true;
-			best_score = score;
-			ret = get_stroke_action(x.first);
-			if(r) r->best_stroke = &y;
-		}
-		if(r) {
-			const std::string& name = get_stroke_name(x.first);
-			r->r.insert(std::pair<double, std::pair<std::string, const Stroke*> >
-				(score, std::pair<std::string, const Stroke*>(name, &y)));
-			if(new_best) r->name = name;
-		}
-	}
-	
-	if(r) {
-		r->score = best_score;
-		r->action = ret;
-	}
-	return ret;
-}
-
 
 static const char *default_vertex_shader_source =
 R"(#version 100

@@ -4,6 +4,8 @@ public class CellRendererTextish : Gtk.CellRendererText {
 	public enum Mode { Text, Key, Popup, Combo }
         public new Mode mode;
 	public unowned string[] items;
+	
+	public Gdk.Pixbuf? icon { get; set; default = null; }
 
 	public signal void key_edited(string path, Gdk.ModifierType mods, uint code);
 	public signal void combo_edited(string path, uint row);
@@ -26,7 +28,7 @@ public class CellRendererTextish : Gtk.CellRendererText {
 		items = items_;
 	}
 
-	public override unowned Gtk.CellEditable? start_editing (Gdk.Event? event, Gtk.Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gtk.CellRendererState flags) {
+	public override unowned Gtk.CellEditable? start_editing(Gdk.Event? event, Gtk.Widget widget, string path, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gtk.CellRendererState flags) {
 		cell = null;
 		if (!editable)
 			return cell;
@@ -45,6 +47,53 @@ public class CellRendererTextish : Gtk.CellRendererText {
 				break;
 		}
 		return cell;
+	}
+	
+	public override void render(Cairo.Context ctx, Gtk.Widget widget, Gdk.Rectangle background_area, Gdk.Rectangle cell_area, Gtk.CellRendererState flags) {
+		Gdk.cairo_rectangle(ctx, cell_area);
+		if(icon != null) {
+			Gdk.cairo_set_source_pixbuf(ctx, icon, cell_area.x, cell_area.y + cell_area.height / 2 - icon.height / 2);
+			ctx.fill();
+			cell_area.x += icon.width + 4;
+		}
+		base.render(ctx, widget, background_area, cell_area, flags);
+	}
+	
+	public override void get_size(Gtk.Widget widget, Gdk.Rectangle? cell_area, out int x_offset, out int y_offset, out int width, out int height) {
+		base.get_size(widget, cell_area, out x_offset, out y_offset, out width, out height);
+		if(icon != null) {
+			width += icon.width;
+			height = int.max(height, icon.height);
+		}
+	}
+	
+	public override void get_preferred_height(Gtk.Widget widget, out int minimum_size, out int natural_size) {
+		base.get_preferred_height(widget, out minimum_size, out natural_size);
+		if(icon != null) {
+			minimum_size = int.max(minimum_size, icon.height);
+			natural_size = int.max(natural_size, icon.height);
+		}
+	}
+	public override void get_preferred_height_for_width(Gtk.Widget widget, int width, out int minimum_height, out int natural_height) {
+		base.get_preferred_height_for_width(widget, width, out minimum_height, out natural_height);
+		if(icon != null) {
+			minimum_height = int.max(minimum_height, icon.height);
+			natural_height = int.max(natural_height, icon.height);
+		}
+	}
+	public override void get_preferred_width(Gtk.Widget widget, out int minimum_size, out int natural_size) {
+		base.get_preferred_width(widget, out minimum_size, out natural_size);
+		if(icon != null) {
+			minimum_size += icon.width;
+			natural_size += icon.width;
+		}
+	}
+	public override void get_preferred_width_for_height(Gtk.Widget widget, int height, out int minimum_width, out int natural_width) {
+		base.get_preferred_width_for_height(widget, height, out minimum_width, out natural_width);
+		if(icon != null) {
+			minimum_width += icon.width;
+			natural_width += icon.width;
+		}
 	}
 }
 

@@ -110,7 +110,7 @@ struct TypeInfo {
 };
 
 static constexpr TypeInfo all_types[] = {
-	{ Type::COMMAND, N_("Command"),         &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Text  },
+	{ Type::COMMAND, N_("Command"),         &typeid(Command),  CELL_RENDERER_TEXTISH_MODE_Popup },
 	{ Type::KEY,     N_("Key"),             &typeid(SendKey),  CELL_RENDERER_TEXTISH_MODE_Key   },
 //	{ Type::TEXT,    N_("Text"),            &typeid(SendText), CELL_RENDERER_TEXTISH_MODE_Text  },
 //	{ Type::SCROLL,  N_("Scroll"),          &typeid(Scroll),   CELL_RENDERER_TEXTISH_MODE_Key   },
@@ -345,16 +345,25 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	col_type->add_attribute(type_renderer->property_text(), cols.type);
 	col_type->set_cell_data_func(*type_renderer, sigc::mem_fun(*this, &Actions::on_cell_data_type));
 
-	CellRendererTextish *arg_renderer = cell_renderer_textish_new ();
-	GtkTreeViewColumn *col_arg = gtk_tree_view_column_new_with_attributes(_("Details"), GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index(), nullptr);
+	CellRendererTextish *arg_renderer = cell_renderer_textish_new();
+	GtkCellRenderer *cmd_renderer = gtk_cell_renderer_text_new();
+	GtkTreeViewColumn *col_arg = gtk_tree_view_column_new();
+	gtk_tree_view_column_pack_start(col_arg, GTK_CELL_RENDERER (arg_renderer), TRUE);
+	gtk_tree_view_column_pack_start(col_arg, cmd_renderer, FALSE);
+	gtk_tree_view_column_add_attribute(col_arg, GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index());
+	gtk_tree_view_column_add_attribute(col_arg, GTK_CELL_RENDERER (arg_renderer), "icon", cols.action_icon.index());
+	gtk_tree_view_column_add_attribute(col_arg, cmd_renderer, "text", cols.cmd_path.index());
+	// GtkTreeViewColumn *col_arg = gtk_tree_view_column_new_with_attributes(_("Details"), GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index(), nullptr);
 	gtk_tree_view_append_column(tv.gobj(), col_arg);
 
 	gtk_tree_view_column_set_cell_data_func (col_arg, GTK_CELL_RENDERER (arg_renderer), on_actions_cell_data_arg, this, nullptr);
 	gtk_tree_view_column_set_resizable(col_arg, true);
 	g_object_set(arg_renderer, "editable", true, nullptr);
+	g_object_set(cmd_renderer, "editable", true, nullptr);
 	g_signal_connect(arg_renderer, "key-edited", G_CALLBACK(on_actions_accel_edited), this);
 	g_signal_connect(arg_renderer, "combo-edited", G_CALLBACK(on_actions_combo_edited), this);
 	g_signal_connect(arg_renderer, "edited", G_CALLBACK(on_actions_text_edited), this);
+	g_signal_connect(cmd_renderer, "edited", G_CALLBACK(on_actions_text_edited), this);
 	g_signal_connect(arg_renderer, "editing-started", G_CALLBACK(on_actions_editing_started), this);
 
 	update_action_list();
@@ -1059,7 +1068,7 @@ void Actions::update_action_list() {
 	tm->set_sort_column(col, sort);
 }
 
-void Actions::update_row(const Gtk::TreeRow &row) {
+void Actions::update_row(const Gtk::TreeRow& row) {
 	StrokeRow si = action_list->get_info(row[cols.id]);
 	row[cols.stroke] = (si.stroke && !si.stroke->trivial()) ? 
 		StrokeDrawer::draw((si.stroke), STROKE_SIZE, si.stroke_overwrite ? 4.0 : 2.0) : StrokeDrawer::drawEmpty(STROKE_SIZE);
@@ -1069,7 +1078,30 @@ void Actions::update_row(const Gtk::TreeRow &row) {
 	row[cols.deactivated] = si.deleted;
 	row[cols.name_bold] = si.name_overwrite;
 	row[cols.action_bold] = si.action_overwrite;
+	row[cols.action_icon] = Glib::RefPtr<Gdk::Pixbuf>();
+	row[cols.cmd_path] = "";
 	button_reset_actions->set_sensitive(si.stroke_overwrite || si.deleted || si.name_overwrite || si.action_overwrite);
+	if(si.action) {
+		const Command* tmp = dynamic_cast<const Command*>(si.action);
+		if(tmp) {
+			Glib::ustring cmd1 = row[cols.arg];
+			row[cols.cmd_path] = cmd1;
+			auto it = command_info.find(tmp);
+			if(it != command_info.end()) {
+				row[cols.arg] = it->second.name;
+				row[cols.action_icon] = it->second.icon;
+			}
+			else {
+				row[cols.arg] = _("Custom command:  ");
+				auto icon_theme = Gtk::IconTheme::get_default();
+				auto pb = icon_theme->load_icon("document-open", 32);
+				if(pb) {
+					if(pb->get_width() > 32) pb = pb->scale_simple(32, 32, Gdk::INTERP_BILINEAR);
+					row[cols.action_icon] = pb;
+				}
+			}
+		}
+	}
 }
 
 class Actions::OnStroke {
@@ -1273,6 +1305,28 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	tv.grab_focus();
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
+	if(type == Type::COMMAND) {
+		Gtk::AppChooserDialog dialog("", *main_win);
+		dialog.set_heading(std::string("Choose app to run for gesture \"") + row[cols.name] + "\"");
+		auto widget = dynamic_cast<Gtk::AppChooserWidget*>(dialog.get_widget());
+		widget->set_show_all(true);
+		auto x = dialog.run();
+		if(!x) return;
+		auto app = widget->get_app_info();
+		auto cmdline = app->get_executable();
+		if(cmdline == "env") cmdline = app->get_commandline(); /* hack for Wine and similar */
+		auto new_cmd = Command::create(std::move(cmdline));
+		
+		auto icon_theme = Gtk::IconTheme::get_default();
+		auto icon_info = icon_theme->lookup_icon(app->get_icon(), 32);
+		CommandInfo ci;
+		ci.icon = icon_info.load_icon();
+		if(ci.icon->get_width() > 32) ci.icon = ci.icon->scale_simple(32, 32, Gdk::INTERP_BILINEAR);
+		ci.name = app->get_name();
+		command_info[(Command*)new_cmd.get()] = std::move(ci);
+		action_list->set_action(row[cols.id], std::move(new_cmd));
+		update_row(row);
+	}
 	if (type == Type::BUTTON) {
 		Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));
 		Button tmp;

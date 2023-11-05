@@ -71,7 +71,8 @@ class Actions {
 		void on_apps_selection_changed();
 		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff<false> *actions);
 		void update_action_list();
-		void update_row(const Gtk::TreeRow &row);
+		void update_row(const Gtk::TreeRow& row);
+//		void update_row(Gtk::TreeRow&& row) { update_row(row); }
 		void update_counts();
 		void on_remove_app();
 		
@@ -83,10 +84,10 @@ class Actions {
 			public:
 				ModelColumns() {
 					add(stroke); add(name); add(type); add(arg); add(cmd_save); add(id);
-					add(name_bold); add(action_bold); add(deactivated);
+					add(name_bold); add(action_bold); add(deactivated); add(action_icon); add(cmd_path);
 				}
-				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
-				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
+				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke, action_icon;
+				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save, cmd_path;
 				Gtk::TreeModelColumn<stroke_id> id;
 				Gtk::TreeModelColumn<bool> name_bold, action_bold;
 				Gtk::TreeModelColumn<bool> deactivated;
@@ -117,6 +118,13 @@ class Actions {
 		ModelColumns cols;
 		TreeViewMulti tv;
 		Glib::RefPtr<Store> tm;
+
+		/* Special casing to store additional info about Command actions */
+		struct CommandInfo {
+			Glib::ustring name;
+			Glib::RefPtr<Gdk::Pixbuf> icon;
+		};
+		std::unordered_map<const Command*, CommandInfo> command_info;
 
 		Gtk::TreeView *apps_view = nullptr;
 		Glib::RefPtr<AppsStore> apps_model;

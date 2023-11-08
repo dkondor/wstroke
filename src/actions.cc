@@ -1306,15 +1306,47 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
 	if(type == Type::COMMAND) {
-		Gtk::AppChooserDialog dialog("", *main_win);
-		dialog.set_heading(std::string("Choose app to run for gesture \"") + row[cols.name] + "\"");
-		auto widget = dynamic_cast<Gtk::AppChooserWidget*>(dialog.get_widget());
-		widget->set_show_all(true);
-		auto x = dialog.run();
-		if(!x) return;
-		auto app = widget->get_app_info();
+		auto icon_theme = Gtk::IconTheme::get_default();
+		Gtk::Dialog* dialog;
+		Gtk::HeaderBar* header;
+		Gtk::FlowBox* flowbox;
+		widgets->get_widget("dialog_appchooser", dialog);
+		widgets->get_widget("header_appchooser", header);
+		widgets->get_widget("flowbox_appchooser", flowbox);
+		Glib::ustring str = Glib::ustring::compose(_("Choose app to run for gesture %1"), row[cols.name]);
+		header->set_subtitle(str);
+		
+		std::unordered_map<Gtk::Button*, Glib::RefPtr<Gio::AppInfo> > app_buttons;
+		auto all_apps = Gio::AppInfo::get_all();
+		for(auto a : all_apps) {
+			if(!a->should_show()) continue;
+			auto box = new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL);
+			auto btn = new Gtk::Button();
+			auto label = new Gtk::Label(a->get_name());
+			auto image = new Gtk::Image(a->get_icon(), Gtk::IconSize(48));
+			box->pack_start(*image);
+			box->pack_start(*label);
+			btn->add(*box);
+/*			btn->set_image(*image);
+			btn->set_image_position(Gtk::PositionType::POS_TOP);
+			btn->set_always_show_image(true); */
+			btn->set_relief(Gtk::ReliefStyle::RELIEF_NONE);
+			app_buttons[btn] = a;
+			// box->add(*btn);
+			flowbox->add(*btn);
+			// box->show();
+		}
+		
+		dialog->show();
+		Gtk::Button *select_ok;
+		widgets->get_widget("appchooser_ok", select_ok);
+		select_ok->grab_focus();
+		auto x = dialog->run();
+		dialog->hide();
+		if(x != Gtk::RESPONSE_OK) return;
+/*		auto app = widget->get_app_info();
 		auto cmdline = app->get_executable();
-		if(cmdline == "env") cmdline = app->get_commandline(); /* hack for Wine and similar */
+		if(cmdline == "env") cmdline = app->get_commandline(); // hack for Wine and similar 
 		auto new_cmd = Command::create(std::move(cmdline));
 		
 		auto icon_theme = Gtk::IconTheme::get_default();
@@ -1325,7 +1357,7 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 		ci.name = app->get_name();
 		command_info[(Command*)new_cmd.get()] = std::move(ci);
 		action_list->set_action(row[cols.id], std::move(new_cmd));
-		update_row(row);
+		update_row(row); */
 	}
 	if (type == Type::BUTTON) {
 		Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));

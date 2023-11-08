@@ -18,6 +18,7 @@
 #include "actiondb.h"
 #include "stroke_draw.h"
 #include "convert_keycodes.h"
+#include "input_inhibitor.h"
 #include <filesystem>
 #include <toplevel-grabber.h>
 #include <glibmm/i18n.h>
@@ -1097,7 +1098,8 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	Gtk::MessageDialog *dialog;
 	static SRArea *drawarea = nullptr;
 	widgets->get_widget("dialog_record", dialog);
-	dialog->set_secondary_text(Glib::ustring::compose(_("The next stroke will be associated with the action \"%1\".  You can draw it in the area below, using any pointer button."), row[cols.name]));
+	if(input_inhibitor_grab()) dialog->set_secondary_text(Glib::ustring::compose(_("The next stroke will be associated with the action \"%1\".  You can draw it in the area below, using any pointer button."), row[cols.name]));
+	else dialog->set_secondary_text(Glib::ustring::compose(_("The next stroke will be associated with the action \"%1\".  You can draw it in the area below. You may need to use a different pointer button than the one normally used for gestures."), row[cols.name]));
 	
 	if(!drawarea) {
 		drawarea = Gtk::manage(new SRArea());
@@ -1118,6 +1120,7 @@ void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED G
 	cancel->grab_focus();
 	int response = dialog->run();
 	dialog->hide();
+	input_inhibitor_ungrab();
 	sig.disconnect();
 	drawarea->clear();
 	if (response != 1)

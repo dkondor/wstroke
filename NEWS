@@ -1,3 +1,7 @@
+2.0.1
+=========
+* Allow recording strokes with the same button that is used by the plugin
+
 2.0
 =========
 * Refactor internal storage and clean code

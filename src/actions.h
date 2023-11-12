@@ -35,7 +35,8 @@ public:
 
 class Actions {
 	public:
-		Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_, Gtk::Dialog* message_dialog = nullptr);
+		Actions(const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_), config_dir(config_dir_) { }
+		void startup(Gtk::Application* app, Gtk::Dialog* message_dialog = nullptr);
 	private:
 		void on_button_delete();
 		void on_button_new();
@@ -56,6 +57,8 @@ class Actions {
 		
 		Gtk::Window* get_main_win() { return main_win.get(); }
 		void exit() { exiting = true; save_actions(); }
+		
+		ActionDB actions;
 		
 	private:
 		int compare_ids(const Gtk::TreeModel::iterator &a, const Gtk::TreeModel::iterator &b);
@@ -115,7 +118,7 @@ class Actions {
 		TreeViewMulti tv;
 		Glib::RefPtr<Store> tm;
 
-		Gtk::TreeView *apps_view;
+		Gtk::TreeView *apps_view = nullptr;
 		Glib::RefPtr<AppsStore> apps_model;
 		/* helper to find a given app in apps_view / apps_model */
 		bool get_action_item(const ActionListDiff<false>* x, Gtk::TreeIter& it);
@@ -151,12 +154,11 @@ class Actions {
 		Gtk::VPaned *vpaned_apps;
 
 		int vpaned_position;
-		bool editing_new;
-		bool editing;
+		bool editing_new = false;
+		bool editing = false;
 
 		ActionListDiff<false>* action_list;
 		Glib::RefPtr<Gtk::Builder> widgets;
-		ActionDB& actions;
 		
 		/* import / export */
 		Gtk::Window* import_dialog;
@@ -171,11 +173,11 @@ class Actions {
 		
 		/* main window */
 		std::unique_ptr<Gtk::Window> main_win;
-		const std::string& config_dir;
+		const std::string config_dir;
 		Glib::RefPtr<Glib::TimeoutSource> timeout; /* timeout for saving changes */
-		bool actions_changed;
-		bool exiting;
-		bool save_error;
+		bool actions_changed = false;
+		bool exiting = false;
+		bool save_error = false;
 };
 
 #endif

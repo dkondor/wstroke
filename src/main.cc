@@ -60,17 +60,13 @@ bool config_error_dialog(const Glib::ustring& fn, const Glib::ustring& err, Gtk:
 }
 
 
-int main(int argc, char **argv)
+void startup(Gtk::Application* app, Actions** p_actions)
 {
 	char* xdg_config = getenv("XDG_CONFIG_HOME");
 	std::string home_dir = getenv("HOME");
 	std::string old_config_dir = home_dir + "/.easystroke/";
 	std::string config_dir = xdg_config ? std::string(xdg_config) + "/wstroke/" :
 		home_dir + "/.config/wstroke/";
-	
-	auto app = Gtk::Application::create(argc, argv, "org.wstroke.config");
-	
-	KeyCodes::init();
 	
 	// ensure that config dir exists
 	std::error_code ec;
@@ -81,7 +77,7 @@ int main(int argc, char **argv)
 				"You can change the configuration directory "
 				"using the XDG_CONFIG_HOME environment variable."
 				), config_dir));
-			return 1;
+			return; // note: not creating a main window will result in automatically exiting
 		}
 	}
 	else {
@@ -91,13 +87,15 @@ int main(int argc, char **argv)
 				"You can change the configuration directory "
 				"using the XDG_CONFIG_HOME environment variable."
 				), config_dir));
-			return 1;
+			return; // note: not creating a main window will result in automatically exiting
 		}
 	}
 	
 	Glib::RefPtr<Gtk::Builder> widgets = Gtk::Builder::create_from_resource("/easystroke/gui.glade");
-	
-	ActionDB actions_db;
+	auto actions = new Actions(config_dir, widgets);
+	*p_actions = actions;
+	ActionDB& actions_db = actions->actions;
+	KeyCodes::init();
 	bool config_read;
 	std::string config_err_msg;
 	std::string easystroke_convert_msg;
@@ -116,7 +114,7 @@ int main(int argc, char **argv)
 			if(x == ActionDB::wstroke_actions_versions) {
 				/* In this case, the error is with reading the current config
 				 * (which would be overwritten by us). Signal an error to the user */
-				if(!config_error_dialog(fn, e.what(), widgets.get())) return 1;
+				if(!config_error_dialog(fn, e.what(), widgets.get())) return;
 				
 				/* move the configuration file -- try to assign a new filename
 				 * in a naive way (we assume that there is no gain from TOCTOU
@@ -184,14 +182,22 @@ int main(int argc, char **argv)
 		d = new Gtk::MessageDialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	}
 	
-	Actions actions(actions_db, config_dir, widgets, d);
-	
 	if(!input_inhibitor_init())
 		fprintf(stderr, _("Could not initialize keyboard grabber interface. Assigning key combinations might not work.\n"));
 	
-	app->run(*actions.get_main_win(), argc, argv);
-	actions.exit();
-	
-	return 0;
+	actions->startup(app, d);
+}
+
+int main(int argc, char **argv) {
+	Actions* actions = nullptr;
+	auto app = Gtk::Application::create(argc, argv, "org.wstroke.config");
+	app->signal_startup().connect([&app, &actions]() { startup(app.get(), &actions); });
+	app->signal_activate().connect([&actions]() { if(actions) actions->get_main_win()->present(); });
+	int ret = app->run();
+	if(actions) {
+		actions->exit();
+		delete actions;
+	}
+	return ret;
 }
 

@@ -171,19 +171,7 @@ static void on_actions_editing_started(GtkCellRenderer *, GtkCellEditable *edita
 	((Actions *)data)->on_arg_editing_started(editable, path);
 }
 
-Actions::Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_, Gtk::Dialog* message_dialog) :
-	apps_view(0),
-	editing_new(false),
-	editing(false),
-	action_list(actions_.get_root()),
-	widgets(widgets_),
-	actions(actions_),
-	config_dir(config_dir_),
-	timeout(Glib::TimeoutSource::create(5000)),
-	actions_changed(false),
-	exiting(false),
-	save_error(false)
-{
+void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	{
 		Gtk::Window* tmp = nullptr;
 		widgets->get_widget("main", tmp);
@@ -197,7 +185,11 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPt
 				delete message_dialog;
 			});
 		}
+		app->add_window(*tmp);
 	}
+	
+	timeout = Glib::TimeoutSource::create(5000);
+	action_list = actions.get_root();
 	
 	Gtk::ScrolledWindow *sw;
 	widgets->get_widget("scrolledwindow_actions", sw);
@@ -440,6 +432,8 @@ Actions::Actions(ActionDB& actions_, const std::string& config_dir_, Glib::RefPt
 	radio_scroll->signal_toggled().connect([radio_scroll, spin_fingers](){
 		spin_fingers->set_sensitive(!radio_scroll->get_active());
 	});
+	
+	main_win->show();
 }
 
 static Glib::ustring app_name_hr(Glib::ustring src) {

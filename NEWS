@@ -1,3 +1,7 @@
+2.0.2
+=========
+* Avoid a potential edge case where refocusing the original view conflicts with the Command action.
+
 2.0.1
 =========
 * Allow recording strokes with the same button that is used by the plugin

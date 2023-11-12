@@ -349,7 +349,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		void visit(const Command* action) override {
 			const auto& cmd = action->get_cmd();
 			LOGD("Running command: ", cmd);
-			wf::get_core().run(cmd);
+			set_idle_action([cmd] () {wf::get_core().run(cmd);}, false);
 		}
 		void visit(const SendKey* action) override {
 			uint32_t mod = action->get_mods();
@@ -434,7 +434,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					plugin_activator = "wm-actions/toggle_showdesktop";
 					break;
 				case Global::Type::SHOW_CONFIG:
-					wf::get_core().run("wstroke-config");
+					set_idle_action([] () {wf::get_core().run("wstroke-config");}, false);
 					/* fallthrough */
 				default:
 					return;
@@ -513,11 +513,12 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* set the action taken by the idle callback;
 		 * this automatically handles refocusing if needed */
 		template<class CB>
-		void set_idle_action(CB&& cb) {
+		void set_idle_action(CB&& cb, bool refocus_after_action = true) {
 			needs_refocus2 = needs_refocus;
-			idle_generate.run_once([this, cb] () {
+			idle_generate.run_once([this, cb, refocus_after_action] () {
+				if(needs_refocus2 && !refocus_after_action) wf::get_core().seat->focus_view(initial_active_view);
 				cb();
-				if(needs_refocus2) wf::get_core().seat->focus_view(initial_active_view);
+				if(needs_refocus2 && refocus_after_action) wf::get_core().seat->focus_view(initial_active_view);
 				view_unmapped.disconnect();
 			});
 			needs_refocus = false;

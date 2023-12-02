@@ -6,7 +6,7 @@ Note: this branch requires a recent version of Wayfire and wlroots (see below). 
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) (see below for compiling for older Wayfire versions)
+ - [Wayfire](https://github.com/WayfireWM/wayfire) at least version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) (see below for compiling for older Wayfire versions)
  - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)

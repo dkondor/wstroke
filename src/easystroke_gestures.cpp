@@ -35,6 +35,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
+#include <filesystem>
 
 #include <linux/input-event-codes.h>
 extern "C"

@@ -22,12 +22,14 @@
 #include <wayland-server-core.h>
 
 extern "C" {
+#define static
 #include <wlr/backend/headless.h>
 #include <wlr/backend/multi.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
+#undef static
 }
 
 #include <wayfire/util/log.hpp>

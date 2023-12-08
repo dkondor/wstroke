@@ -1310,54 +1310,90 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 		Gtk::Dialog* dialog;
 		Gtk::HeaderBar* header;
 		Gtk::FlowBox* flowbox;
+		Gtk::ScrolledWindow* sw;
+		Gtk::Entry* entry;
+		Gtk::CheckButton* cb;
+		
 		widgets->get_widget("dialog_appchooser", dialog);
 		widgets->get_widget("header_appchooser", header);
-		widgets->get_widget("flowbox_appchooser", flowbox);
+		widgets->get_widget("entry_appchooser", entry);
+		widgets->get_widget("checkbutton_appchooser", cb);
+		widgets->get_widget("scrolledwindow_appchooser", sw);
+		
+		cb->set_active(false);
+		entry->set_sensitive(false);
+		cb->signal_toggled().connect([cb, entry]() {
+			entry->set_sensitive(cb->get_active());
+		});
+		
+		flowbox = new Gtk::FlowBox();
+		flowbox->set_valign(Gtk::ALIGN_START);
+		flowbox->set_homogeneous(true);
+		flowbox->set_activate_on_single_click(false);
+		sw->add(*flowbox);
+		
 		Glib::ustring str = Glib::ustring::compose(_("Choose app to run for gesture %1"), row[cols.name]);
 		header->set_subtitle(str);
 		
-		std::unordered_map<Gtk::Button*, Glib::RefPtr<Gio::AppInfo> > app_buttons;
+		std::unordered_map<Gtk::Box*, Glib::RefPtr<Gio::AppInfo> > app_buttons;
 		auto all_apps = Gio::AppInfo::get_all();
 		for(auto a : all_apps) {
 			if(!a->should_show()) continue;
-			auto box = new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL);
-			auto btn = new Gtk::Button();
-			auto label = new Gtk::Label(a->get_name());
-			auto image = new Gtk::Image(a->get_icon(), Gtk::IconSize(48));
-			box->pack_start(*image);
-			box->pack_start(*label);
-			btn->add(*box);
-/*			btn->set_image(*image);
-			btn->set_image_position(Gtk::PositionType::POS_TOP);
-			btn->set_always_show_image(true); */
-			btn->set_relief(Gtk::ReliefStyle::RELIEF_NONE);
-			app_buttons[btn] = a;
-			// box->add(*btn);
-			flowbox->add(*btn);
-			// box->show();
+			auto box = new Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL);
+			auto image = new Gtk::Image(a->get_icon(), Gtk::IconSize(Gtk::ICON_SIZE_DIALOG));
+			image->set_pixel_size(48);
+			box->add(*image);
+			const std::string& name = a->get_name();
+			auto label = new Gtk::Label(name.length() > 23 ? name.substr(0, 20) + "..." : name);
+			box->add(*label);
+			flowbox->add(*box);
+			app_buttons[box] = a;
 		}
 		
-		dialog->show();
+		dialog->show_all();
 		Gtk::Button *select_ok;
 		widgets->get_widget("appchooser_ok", select_ok);
 		select_ok->grab_focus();
+		
+		flowbox->signal_child_activated().connect([dialog](Gtk::FlowBoxChild*) {
+			dialog->response(Gtk::RESPONSE_OK);
+		});
+		
 		auto x = dialog->run();
 		dialog->hide();
-		if(x != Gtk::RESPONSE_OK) return;
-/*		auto app = widget->get_app_info();
-		auto cmdline = app->get_executable();
-		if(cmdline == "env") cmdline = app->get_commandline(); // hack for Wine and similar 
-		auto new_cmd = Command::create(std::move(cmdline));
 		
-		auto icon_theme = Gtk::IconTheme::get_default();
-		auto icon_info = icon_theme->lookup_icon(app->get_icon(), 32);
-		CommandInfo ci;
-		ci.icon = icon_info.load_icon();
-		if(ci.icon->get_width() > 32) ci.icon = ci.icon->scale_simple(32, 32, Gdk::INTERP_BILINEAR);
-		ci.name = app->get_name();
-		command_info[(Command*)new_cmd.get()] = std::move(ci);
-		action_list->set_action(row[cols.id], std::move(new_cmd));
-		update_row(row); */
+		if(x == Gtk::RESPONSE_OK) {
+			if(cb->get_active()) {
+				action_list->set_action(row[cols.id], Command::create(entry->get_text()));
+				update_row(row);
+				update_actions();
+			}
+			else {
+				auto tmp = flowbox->get_selected_children();
+				if(tmp.size()) {
+					auto selected = tmp.front();
+					Gtk::Box* box = dynamic_cast<Gtk::Box*>(selected->get_child());
+					if(box) {
+						auto selected_app = app_buttons.at(box);
+						auto cmdline = selected_app->get_executable();
+						if(cmdline == "env") cmdline = selected_app->get_commandline();
+						auto cmd = Command::create(cmdline);
+						CommandInfo info;
+						info.name = selected_app->get_name();
+						auto icon_theme = Gtk::IconTheme::get_default();
+						auto icon_info = icon_theme->lookup_icon(selected_app->get_icon(), 32, Gtk::ICON_LOOKUP_FORCE_SIZE);
+						auto pb = icon_info.load_icon();
+						if(pb) info.icon = pb;
+						command_info[dynamic_cast<const Command*>(cmd.get())] = std::move(info);
+						action_list->set_action(row[cols.id], std::move(cmd));
+						update_row(row);
+						update_actions();
+					}
+				}
+			}
+		}
+		sw->remove();
+		delete flowbox;
 	}
 	if (type == Type::BUTTON) {
 		Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));

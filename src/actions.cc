@@ -188,6 +188,8 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 		app->add_window(*tmp);
 	}
 	
+	chooser.startup();
+	
 	timeout = Glib::TimeoutSource::create(5000);
 	action_list = actions.get_root();
 	
@@ -360,12 +362,15 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	gtk_tree_view_column_set_resizable(col_arg, true);
 	g_object_set(arg_renderer, "editable", true, nullptr);
 	g_object_set(cmd_renderer, "editable", true, nullptr);
+	g_object_set(cmd_renderer, "max-width-chars", 35, nullptr);
+	g_object_set(cmd_renderer, "ellipsize", PANGO_ELLIPSIZE_END, nullptr);
 	g_signal_connect(arg_renderer, "key-edited", G_CALLBACK(on_actions_accel_edited), this);
 	g_signal_connect(arg_renderer, "combo-edited", G_CALLBACK(on_actions_combo_edited), this);
 	g_signal_connect(arg_renderer, "edited", G_CALLBACK(on_actions_text_edited), this);
 	g_signal_connect(cmd_renderer, "edited", G_CALLBACK(on_actions_text_edited), this);
 	g_signal_connect(arg_renderer, "editing-started", G_CALLBACK(on_actions_editing_started), this);
-
+	
+	load_command_infos();
 	update_action_list();
 	tv.set_model(tm);
 	tv.enable_model_drag_source();
@@ -1086,7 +1091,7 @@ void Actions::update_row(const Gtk::TreeRow& row) {
 		if(tmp) {
 			Glib::ustring cmd1 = row[cols.arg];
 			row[cols.cmd_path] = cmd1;
-			auto it = command_info.find(tmp);
+			auto it = command_info.find(tmp->desktop_file);
 			if(it != command_info.end()) {
 				row[cols.arg] = it->second.name;
 				row[cols.action_icon] = it->second.icon;
@@ -1306,98 +1311,32 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
 	if(type == Type::COMMAND) {
-		auto icon_theme = Gtk::IconTheme::get_default();
-		Gtk::Dialog* dialog;
-		Gtk::HeaderBar* header;
-		Gtk::FlowBox* flowbox;
-		Gtk::ScrolledWindow* sw;
-		Gtk::Entry* entry;
-		Gtk::CheckButton* cb;
-		
-		widgets->get_widget("dialog_appchooser", dialog);
-		widgets->get_widget("header_appchooser", header);
-		widgets->get_widget("entry_appchooser", entry);
-		widgets->get_widget("checkbutton_appchooser", cb);
-		widgets->get_widget("scrolledwindow_appchooser", sw);
-		
-		cb->set_active(false);
-		entry->set_sensitive(false);
-		cb->signal_toggled().connect([cb, entry]() {
-			entry->set_sensitive(cb->get_active());
-		});
-		
-		flowbox = new Gtk::FlowBox();
-		flowbox->set_valign(Gtk::ALIGN_START);
-		flowbox->set_homogeneous(true);
-		flowbox->set_activate_on_single_click(false);
-		sw->add(*flowbox);
-		
-		Glib::ustring str = Glib::ustring::compose(_("Choose app to run for gesture %1"), row[cols.name]);
-		header->set_subtitle(str);
-		
-		std::unordered_map<Gtk::Box*, Glib::RefPtr<Gio::AppInfo> > app_buttons;
-		auto all_apps = Gio::AppInfo::get_all();
-		for(auto a : all_apps) {
-			if(!a->should_show()) continue;
-			auto box = new Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL);
-			auto image = new Gtk::Image(a->get_icon(), Gtk::IconSize(Gtk::ICON_SIZE_DIALOG));
-			image->set_pixel_size(48);
-			box->add(*image);
-			const std::string& name = a->get_name();
-			auto label = new Gtk::Label(name.length() > 23 ? name.substr(0, 20) + "..." : name);
-			box->add(*label);
-			flowbox->add(*box);
-			app_buttons[box] = a;
-		}
-		
-		dialog->show_all();
-		Gtk::Button *select_ok;
-		widgets->get_widget("appchooser_ok", select_ok);
-		select_ok->grab_focus();
-		
-		flowbox->signal_child_activated().connect([dialog](Gtk::FlowBoxChild*) {
-			dialog->response(Gtk::RESPONSE_OK);
-		});
-		
-		auto x = dialog->run();
-		dialog->hide();
-		
-		if(x == Gtk::RESPONSE_OK) {
-			if(cb->get_active()) {
-				action_list->set_action(row[cols.id], Command::create(entry->get_text()));
+		if(chooser.run(row[cols.name])) {
+			auto icon_theme = Gtk::IconTheme::get_default();
+			if(chooser.custom_res) {
+				action_list->set_action(row[cols.id], Command::create(chooser.res_cmdline));
 				update_row(row);
 				update_actions();
 			}
 			else {
-				auto tmp = flowbox->get_selected_children();
-				if(tmp.size()) {
-					auto selected = tmp.front();
-					Gtk::Box* box = dynamic_cast<Gtk::Box*>(selected->get_child());
-					if(box) {
-						auto selected_app = app_buttons.at(box);
-						auto selected_app_desktop = dynamic_cast<Gio::DesktopAppInfo*>(selected_app.get());
-						if(selected_app_desktop) {
-							fprintf(stderr, "Selected app with desktop file: %s\n", selected_app_desktop->get_filename().c_str());
-						}
-						auto cmdline = selected_app->get_executable();
-						if(cmdline == "env") cmdline = selected_app->get_commandline();
-						auto cmd = Command::create(cmdline);
-						CommandInfo info;
-						info.name = selected_app->get_name();
-						auto icon_theme = Gtk::IconTheme::get_default();
-						auto icon_info = icon_theme->lookup_icon(selected_app->get_icon(), 32, Gtk::ICON_LOOKUP_FORCE_SIZE);
-						auto pb = icon_info.load_icon();
-						if(pb) info.icon = pb;
-						command_info[dynamic_cast<const Command*>(cmd.get())] = std::move(info);
-						action_list->set_action(row[cols.id], std::move(cmd));
-						update_row(row);
-						update_actions();
-					}
+				auto selected_app_desktop = dynamic_cast<Gio::DesktopAppInfo*>(chooser.res_app.get());
+				std::string desktop = selected_app_desktop ? selected_app_desktop->get_filename() : std::string();
+				if(!desktop.empty()) {
+					auto cmd = Command::create(chooser.res_cmdline, desktop);
+					CommandInfo info;
+					info.name = selected_app_desktop->get_name();
+					auto icon_theme = Gtk::IconTheme::get_default();
+					auto icon_info = icon_theme->lookup_icon(selected_app_desktop->get_icon(), 32, Gtk::ICON_LOOKUP_FORCE_SIZE);
+					auto pb = icon_info.load_icon();
+					if(pb) info.icon = pb;
+					command_info[desktop] = std::move(info);
+					action_list->set_action(row[cols.id], std::move(cmd));
 				}
+				else action_list->set_action(row[cols.id], Command::create(chooser.res_cmdline));
+				update_row(row);
+				update_actions();
 			}
 		}
-		sw->remove();
-		delete flowbox;
 	}
 	if (type == Type::BUTTON) {
 		Button* bt = dynamic_cast<Button*>(action_list->get_stroke_action(row[cols.id]));
@@ -1419,6 +1358,30 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 		update_row(row);
 		update_actions();
 	}
+}
+
+void Actions::load_command_infos_r(ActionListDiff<false>& x) {
+	x.visit_all_actions([this] (const Action* a) {
+		const Command* c = dynamic_cast<const Command*>(a);
+		if(c && !c->desktop_file.empty()) {
+			auto dinfo = Gio::DesktopAppInfo::create_from_filename(c->desktop_file);
+			if(dinfo) {
+				CommandInfo info;
+				info.name = dinfo->get_name();
+				auto icon_theme = Gtk::IconTheme::get_default();
+				auto icon_info = icon_theme->lookup_icon(dinfo->get_icon(), 32, Gtk::ICON_LOOKUP_FORCE_SIZE);
+				auto pb = icon_info.load_icon();
+				if(pb) info.icon = pb;
+				command_info[c->desktop_file] = std::move(info);
+			}
+		}
+	});
+	for(auto& y : x) load_command_infos_r(y);
+}
+
+void Actions::load_command_infos() {
+	// go through all Command actions and load the name and icon of the command if possible
+	load_command_infos_r(*actions.get_root());
 }
 
 void Actions::save_actions() {
@@ -1463,6 +1426,7 @@ void Actions::try_import() {
 		
 		if(import_add->get_active()) actions.merge_actions(std::move(tmp_db));
 		else actions.overwrite_actions(std::move(tmp_db));
+		load_command_infos();
 		
 		update_action_list();
 		load_app_list(apps_model->children(), actions.get_root());

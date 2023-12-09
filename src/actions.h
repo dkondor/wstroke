@@ -21,7 +21,7 @@
 #include <memory>
 #include <glibmm/main.h>
 #include "actiondb.h"
-
+#include "appchooser.h"
 
 class TreeViewMulti : public Gtk::TreeView {
 	bool pending;
@@ -35,7 +35,7 @@ public:
 
 class Actions {
 	public:
-		Actions(const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_), config_dir(config_dir_) { }
+		Actions(const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_) : chooser(widgets_), widgets(widgets_), config_dir(config_dir_) { }
 		void startup(Gtk::Application* app, Gtk::Dialog* message_dialog = nullptr);
 	private:
 		void on_button_delete();
@@ -124,8 +124,12 @@ class Actions {
 			Glib::ustring name;
 			Glib::RefPtr<Gdk::Pixbuf> icon;
 		};
-		std::unordered_map<const Command*, CommandInfo> command_info;
-
+		std::unordered_map<std::string, CommandInfo> command_info;
+		void load_command_infos_r(ActionListDiff<false>& x);
+		void load_command_infos();
+		/* helper for the app chooser */
+		AppChooser chooser;
+		
 		Gtk::TreeView *apps_view = nullptr;
 		Glib::RefPtr<AppsStore> apps_model;
 		/* helper to find a given app in apps_view / apps_model */

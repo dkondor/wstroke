@@ -1375,6 +1375,10 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 					Gtk::Box* box = dynamic_cast<Gtk::Box*>(selected->get_child());
 					if(box) {
 						auto selected_app = app_buttons.at(box);
+						auto selected_app_desktop = dynamic_cast<Gio::DesktopAppInfo*>(selected_app.get());
+						if(selected_app_desktop) {
+							fprintf(stderr, "Selected app with desktop file: %s\n", selected_app_desktop->get_filename().c_str());
+						}
 						auto cmdline = selected_app->get_executable();
 						if(cmdline == "env") cmdline = selected_app->get_commandline();
 						auto cmd = Command::create(cmdline);

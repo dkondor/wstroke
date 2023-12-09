@@ -74,17 +74,19 @@ public:
 class Command : public Action {
 	friend class boost::serialization::access;
 	template<class Archive> void serialize(Archive & ar, const unsigned int version);
-	Command(const std::string &c) : cmd(c) {}
+	Command(const std::string &c, const std::string& fn) : cmd(c), desktop_file(fn) {}
 	Command(const Command&) = default;
 public:
 	std::string cmd;
+	std::string desktop_file; // name of the .desktop file that belongs to this command
 	Command() {}
-	static std::unique_ptr<Action> create(const std::string &c) { return std::unique_ptr<Action>(new Command(c)); }
+	static std::unique_ptr<Action> create(const std::string& c, const std::string& fn = "") { return std::unique_ptr<Action>(new Command(c, fn)); }
 	void visit(ActionVisitor* visitor) const override { visitor->visit(this); }
 	std::string get_type() const override { return "Command"; }
 	const std::string& get_cmd() const { return cmd; }
 	std::unique_ptr<Action> clone() const override { return std::unique_ptr<Action>(new Command(*this)); }
 };
+BOOST_CLASS_VERSION(Command, 1)
 
 class ModAction : public Action {
 	friend class boost::serialization::access;
@@ -419,6 +421,11 @@ public:
 		else return added.size();
 	}
 	Action* handle(const Stroke& s, Ranking* r) const;
+	
+	template<class CB>
+	void visit_all_actions(CB&& cb) const {
+		for(const auto& x : added) if(x.second.action) cb(x.second.action.get());
+	}
 };
 BOOST_CLASS_VERSION(ActionListDiff<true>, 1)
 BOOST_CLASS_VERSION(ActionListDiff<false>, 1)

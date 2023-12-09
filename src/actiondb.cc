@@ -71,9 +71,10 @@ BOOST_CLASS_EXPORT(Touchpad)
 
 template<class Archive> void Action::serialize(G_GNUC_UNUSED Archive & ar, G_GNUC_UNUSED unsigned int version) {}
 
-template<class Archive> void Command::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {
+template<class Archive> void Command::serialize(Archive & ar, unsigned int version) {
 	ar & boost::serialization::base_object<Action>(*this);
 	ar & cmd;
+	if(version > 0) ar & desktop_file;
 }
 
 template<class Archive> void Plugin::serialize(Archive & ar, G_GNUC_UNUSED unsigned int version) {

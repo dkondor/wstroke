@@ -43,7 +43,7 @@ class Actions {
 		void on_selection_changed();
 		void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
 		void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-		void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
+		void on_row_activated(Gtk::TreeRow& row);
 		void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void save_actions();
@@ -54,6 +54,7 @@ class Actions {
 		void on_arg_editing_started(GtkCellEditable *editable, const gchar *path);
 		void on_text_edited(const gchar *path, const gchar *new_text);
 		void on_cell_data_arg(GtkCellRenderer *cell, gchar *path);
+		void on_stroke_editing(const char* path);
 		
 		Gtk::Window* get_main_win() { return main_win.get(); }
 		void exit() { exiting = true; save_actions(); }
@@ -100,8 +101,8 @@ class Actions {
 					return Glib::RefPtr<Store>(new Store(columns, parent));
 				}
 			protected:
-				bool row_draggable_vfunc(const Gtk::TreeModel::Path &path) const;
-				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
+				bool row_draggable_vfunc(const Gtk::TreeModel::Path&) const;
+				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData&) const;
 				bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
 		};
 		class AppsStore : public Gtk::TreeStore {

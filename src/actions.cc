@@ -171,6 +171,10 @@ static void on_actions_editing_started(GtkCellRenderer *, GtkCellEditable *edita
 	((Actions *)data)->on_arg_editing_started(editable, path);
 }
 
+static void on_stroke_editing_started(GtkCellRenderer *, GtkCellEditable *, const gchar *path, gpointer data) {
+	((Actions *)data)->on_stroke_editing(path);
+}
+
 void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	{
 		Gtk::Window* tmp = nullptr;
@@ -283,7 +287,8 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 		Gtk::TreeModel::Path path;
 		Gtk::TreeViewColumn *col;
 		tv.get_cursor(path, col);
-		on_row_activated(path, col);
+		Gtk::TreeRow row(*tm->get_iter(path));
+		on_row_activated(row);
 	});
 	button_delete->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_button_delete));
 	button_add->signal_clicked().connect(sigc::mem_fun(*this, &Actions::on_button_new));
@@ -302,7 +307,6 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 		});
 	button_about->signal_clicked().connect([about_dialog](){ about_dialog->run(); });
 
-	tv.signal_row_activated().connect(sigc::mem_fun(*this, &Actions::on_row_activated));
 	tv.get_selection()->signal_changed().connect(sigc::mem_fun(*this, &Actions::on_selection_changed));
 
 	tm = Store::create(cols, this);
@@ -310,8 +314,17 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	tv.get_selection()->set_mode(Gtk::SELECTION_MULTIPLE);
 
 	int n;
-	n = tv.append_column(_("Stroke"), cols.stroke);
-	tv.get_column(n-1)->set_sort_column(cols.id);
+	CellRendererTextish *stroke_renderer = cell_renderer_textish_new();
+	stroke_renderer->mode = CELL_RENDERER_TEXTISH_MODE_Popup;
+	GtkTreeViewColumn *col_stroke = gtk_tree_view_column_new();
+	gtk_tree_view_column_pack_start(col_stroke, GTK_CELL_RENDERER (stroke_renderer), TRUE);
+	gtk_tree_view_column_add_attribute(col_stroke, GTK_CELL_RENDERER (stroke_renderer), "icon", cols.stroke.index());
+	gtk_tree_view_column_set_title(col_stroke, _("Stroke"));
+	gtk_tree_view_column_set_sort_column_id(col_stroke, cols.id.index());
+	gtk_tree_view_append_column(tv.gobj(), col_stroke);
+	g_object_set(stroke_renderer, "editable", true, nullptr);
+	g_signal_connect(stroke_renderer, "editing-started", G_CALLBACK(on_stroke_editing_started), this);
+	
 	tm->set_sort_func(cols.id, sigc::mem_fun(*this, &Actions::compare_ids));
 	tm->set_default_sort_func(sigc::mem_fun(*this, &Actions::compare_ids));
 	tm->set_sort_column(Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID, Gtk::SORT_ASCENDING);
@@ -355,7 +368,7 @@ void Actions::startup(Gtk::Application* app, Gtk::Dialog* message_dialog) {
 	gtk_tree_view_column_add_attribute(col_arg, GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index());
 	gtk_tree_view_column_add_attribute(col_arg, GTK_CELL_RENDERER (arg_renderer), "icon", cols.action_icon.index());
 	gtk_tree_view_column_add_attribute(col_arg, cmd_renderer, "text", cols.cmd_path.index());
-	// GtkTreeViewColumn *col_arg = gtk_tree_view_column_new_with_attributes(_("Details"), GTK_CELL_RENDERER (arg_renderer), "text", cols.arg.index(), nullptr);
+	gtk_tree_view_column_set_title(col_arg, _("Details"));
 	gtk_tree_view_append_column(tv.gobj(), col_arg);
 
 	gtk_tree_view_column_set_cell_data_func (col_arg, GTK_CELL_RENDERER (arg_renderer), on_actions_cell_data_arg, this, nullptr);
@@ -700,7 +713,7 @@ bool Actions::AppsStore::drag_data_received_vfunc(const Gtk::TreeModel::Path &de
 	return true;
 }
 
-bool Actions::Store::row_draggable_vfunc(const Gtk::TreeModel::Path &path) const {
+bool Actions::Store::row_draggable_vfunc(const Gtk::TreeModel::Path&) const {
 	int col;
 	Gtk::SortType sort;
 	parent->tm->get_sort_column_id(col, sort);
@@ -709,7 +722,7 @@ bool Actions::Store::row_draggable_vfunc(const Gtk::TreeModel::Path &path) const
 	else return false;
 }
 
-bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const {
+bool Actions::Store::row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData&) const {
 	static bool ignore_next = false;
 	if (gtk_tree_path_get_depth((GtkTreePath *)dest.gobj()) > 1) {
 		// this gets triggered when the drag is over an existing row (as opposed to being "in between" rows)
@@ -1124,8 +1137,12 @@ public:
 	OnStroke(Actions *parent_, Gtk::Dialog *dialog_, Gtk::TreeRow &row_) : parent(parent_), dialog(dialog_), row(row_) {}
 };
 
-void Actions::on_row_activated(const Gtk::TreeModel::Path& path, G_GNUC_UNUSED Gtk::TreeViewColumn* column) {
+void Actions::on_stroke_editing(const char* path) {
 	Gtk::TreeRow row(*tm->get_iter(path));
+	on_row_activated(row);
+}
+
+void Actions::on_row_activated(Gtk::TreeRow& row) {
 	Gtk::MessageDialog *dialog;
 	static SRArea *drawarea = nullptr;
 	widgets->get_widget("dialog_record", dialog);

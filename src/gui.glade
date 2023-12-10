@@ -605,6 +605,9 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
                 <property name="use-action-appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="has-focus">True</property>
+                <property name="can-default">True</property>
+                <property name="has-default">True</property>
                 <property name="receives-default">True</property>
                 <property name="use-stock">True</property>
                 <property name="always-show-image">True</property>
@@ -677,6 +680,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
               <object class="GtkEntry" id="entry_appchooser">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="activates-default">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -891,6 +895,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
                 <property name="use-action-appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="can-default">True</property>
+                <property name="has-default">True</property>
                 <property name="receives-default">True</property>
                 <property name="use-stock">True</property>
                 <property name="always-show-image">True</property>
@@ -1228,6 +1234,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
             <property name="label" translatable="yes">Import</property>
             <property name="visible">True</property>
             <property name="can-focus">True</property>
+            <property name="can-default">True</property>
             <property name="has-default">True</property>
             <property name="receives-default">True</property>
             <property name="image">image14</property>
@@ -1412,6 +1419,10 @@ You can quit to resolve this manually, or choose to overwrite the configuration 
                 <property name="use-action-appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="has-focus">True</property>
+                <property name="is-focus">True</property>
+                <property name="can-default">True</property>
+                <property name="has-default">True</property>
                 <property name="receives-default">True</property>
                 <property name="use-stock">True</property>
                 <property name="always-show-image">True</property>
@@ -1518,6 +1529,7 @@ You can quit to resolve this manually, or choose to overwrite the configuration 
               <object class="GtkSpinButton" id="touchpad_fingers">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="activates-default">True</property>
                 <property name="width-chars">3</property>
                 <property name="input-purpose">number</property>
                 <property name="adjustment">touchpad_fingers_adj</property>

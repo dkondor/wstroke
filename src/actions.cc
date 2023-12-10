@@ -1108,6 +1108,7 @@ void Actions::update_row(const Gtk::TreeRow& row) {
 			if(it != command_info.end()) {
 				row[cols.arg] = it->second.name;
 				row[cols.action_icon] = it->second.icon;
+				row[cols.custom_command] = false;
 			}
 			else {
 				row[cols.arg] = _("Custom command:  ");
@@ -1117,6 +1118,7 @@ void Actions::update_row(const Gtk::TreeRow& row) {
 					if(pb->get_width() > 32) pb = pb->scale_simple(32, 32, Gdk::INTERP_BILINEAR);
 					row[cols.action_icon] = pb;
 				}
+				row[cols.custom_command] = true;
 			}
 		}
 	}
@@ -1328,7 +1330,7 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 	Gtk::TreeRow row(*tm->get_iter(path));
 	Type type = from_name(row[cols.type]);
 	if(type == Type::COMMAND) {
-		if(chooser.run(row[cols.name])) {
+		if(chooser.run(row[cols.name], row[cols.custom_command] ? row[cols.cmd_path] : Glib::ustring())) {
 			auto icon_theme = Gtk::IconTheme::get_default();
 			if(chooser.custom_res) {
 				action_list->set_action(row[cols.id], Command::create(chooser.res_cmdline));

@@ -84,7 +84,7 @@ class AppChooser {
 		
 		void startup();
 		
-		bool run(const Glib::ustring& gesture_name);
+		bool run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command);
 };
 
 #endif

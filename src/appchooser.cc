@@ -126,7 +126,7 @@ bool AppChooser::apps_filter(const Gtk::FlowBoxChild* x) const {
 	return a && a->filter(filter_lower);
 }
 
-bool AppChooser::run(const Glib::ustring& gesture_name) {
+bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command) {
 	if(!apps && !apps_pending) thread.join(); // in this case, the worker thread should be running
 	
 	AppContent* tmp = nullptr;
@@ -147,9 +147,17 @@ bool AppChooser::run(const Glib::ustring& gesture_name) {
 	
 	if(!apps) return false;
 	
-	cb->set_active(false);
-	entry->set_sensitive(false);
-	select_ok->grab_focus();
+	if(custom_command.empty()) {
+		cb->set_active(false);
+		entry->set_sensitive(false);
+	}
+	else {
+		cb->set_active(true);
+		entry->set_sensitive(true);
+	}
+	entry->set_text(custom_command);
+	
+	select_ok->grab_default();
 	Glib::ustring str = Glib::ustring::compose(_("Choose app to run for gesture %1"), gesture_name);
 	header->set_subtitle(str);
 		

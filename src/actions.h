@@ -84,13 +84,14 @@ class Actions {
 			public:
 				ModelColumns() {
 					add(stroke); add(name); add(type); add(arg); add(cmd_save); add(id);
-					add(name_bold); add(action_bold); add(deactivated); add(action_icon); add(cmd_path);
+					add(name_bold); add(action_bold); add(deactivated); add(action_icon);
+					add(cmd_path); add(custom_command);
 				}
 				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke, action_icon;
 				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save, cmd_path;
 				Gtk::TreeModelColumn<stroke_id> id;
 				Gtk::TreeModelColumn<bool> name_bold, action_bold;
-				Gtk::TreeModelColumn<bool> deactivated;
+				Gtk::TreeModelColumn<bool> deactivated, custom_command;
 		};
 		class Store : public Gtk::ListStore {
 			Actions *parent;

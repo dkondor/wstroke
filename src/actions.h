@@ -21,7 +21,7 @@
 #include <memory>
 #include <glibmm/main.h>
 #include "actiondb.h"
-
+#include "appchooser.h"
 
 class TreeViewMulti : public Gtk::TreeView {
 	bool pending;
@@ -35,7 +35,7 @@ public:
 
 class Actions {
 	public:
-		Actions(const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_) : widgets(widgets_), config_dir(config_dir_) { }
+		Actions(const std::string& config_dir_, Glib::RefPtr<Gtk::Builder>& widgets_) : chooser(widgets_), widgets(widgets_), config_dir(config_dir_) { }
 		void startup(Gtk::Application* app, Gtk::Dialog* message_dialog = nullptr);
 	private:
 		void on_button_delete();
@@ -43,7 +43,7 @@ class Actions {
 		void on_selection_changed();
 		void on_name_edited(const Glib::ustring& path, const Glib::ustring& new_text);
 		void on_type_edited(const Glib::ustring& path, const Glib::ustring& new_text);
-		void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
+		void on_row_activated(Gtk::TreeRow& row);
 		void on_cell_data_name(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void on_cell_data_type(Gtk::CellRenderer* cell, const Gtk::TreeModel::iterator& iter);
 		void save_actions();
@@ -54,6 +54,7 @@ class Actions {
 		void on_arg_editing_started(GtkCellEditable *editable, const gchar *path);
 		void on_text_edited(const gchar *path, const gchar *new_text);
 		void on_cell_data_arg(GtkCellRenderer *cell, gchar *path);
+		void on_stroke_editing(const char* path);
 		
 		Gtk::Window* get_main_win() { return main_win.get(); }
 		void exit() { exiting = true; save_actions(); }
@@ -71,7 +72,7 @@ class Actions {
 		void on_apps_selection_changed();
 		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff<false> *actions);
 		void update_action_list();
-		void update_row(const Gtk::TreeRow &row);
+		void update_row(const Gtk::TreeRow& row);
 		void update_counts();
 		void on_remove_app();
 		
@@ -83,13 +84,14 @@ class Actions {
 			public:
 				ModelColumns() {
 					add(stroke); add(name); add(type); add(arg); add(cmd_save); add(id);
-					add(name_bold); add(action_bold); add(deactivated);
+					add(name_bold); add(action_bold); add(deactivated); add(action_icon);
+					add(cmd_path); add(custom_command);
 				}
-				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke;
-				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save;
+				Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > stroke, action_icon;
+				Gtk::TreeModelColumn<Glib::ustring> name, type, arg, cmd_save, plugin_action_save, cmd_path;
 				Gtk::TreeModelColumn<stroke_id> id;
 				Gtk::TreeModelColumn<bool> name_bold, action_bold;
-				Gtk::TreeModelColumn<bool> deactivated;
+				Gtk::TreeModelColumn<bool> deactivated, custom_command;
 		};
 		class Store : public Gtk::ListStore {
 			Actions *parent;
@@ -99,8 +101,8 @@ class Actions {
 					return Glib::RefPtr<Store>(new Store(columns, parent));
 				}
 			protected:
-				bool row_draggable_vfunc(const Gtk::TreeModel::Path &path) const;
-				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData &selection) const;
+				bool row_draggable_vfunc(const Gtk::TreeModel::Path&) const;
+				bool row_drop_possible_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData&) const;
 				bool drag_data_received_vfunc(const Gtk::TreeModel::Path &dest, const Gtk::SelectionData& selection);
 		};
 		class AppsStore : public Gtk::TreeStore {
@@ -118,6 +120,17 @@ class Actions {
 		TreeViewMulti tv;
 		Glib::RefPtr<Store> tm;
 
+		/* Special casing to store additional info about Command actions */
+		struct CommandInfo {
+			Glib::ustring name;
+			Glib::RefPtr<Gdk::Pixbuf> icon;
+		};
+		std::unordered_map<std::string, CommandInfo> command_info;
+		void load_command_infos_r(ActionListDiff<false>& x);
+		void load_command_infos();
+		/* helper for the app chooser */
+		AppChooser chooser;
+		
 		Gtk::TreeView *apps_view = nullptr;
 		Glib::RefPtr<AppsStore> apps_model;
 		/* helper to find a given app in apps_view / apps_model */

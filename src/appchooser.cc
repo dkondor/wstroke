@@ -18,6 +18,16 @@
 #include "appchooser.h"
 #include <glibmm/i18n.h>
 
+AppChooser::AppBox::AppBox(Glib::RefPtr<Gio::AppInfo>& app_) : Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL), app(app_) {
+	auto image = new Gtk::Image(app->get_icon(), Gtk::IconSize(Gtk::ICON_SIZE_DIALOG));
+	image->set_pixel_size(48);
+	this->add(*image);
+	const std::string& name = app->get_name();
+	auto label = new Gtk::Label(name.length() > 23 ? name.substr(0, 20) + "..." : name);
+	this->add(*label);
+	name_lower = Glib::ustring(app->get_name()).lowercase();
+}
+
 void AppChooser::update_apps() {
 	bool tmp;
 	mutex.lock();
@@ -52,15 +62,8 @@ void AppChooser::thread_func() {
 		
 		for(auto& a : tmp->apps) {
 			if(exit_request.load()) break;
-			auto box = new Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL);
-			auto image = new Gtk::Image(a->get_icon(), Gtk::IconSize(Gtk::ICON_SIZE_DIALOG));
-			image->set_pixel_size(48);
-			box->add(*image);
-			const std::string& name = a->get_name();
-			auto label = new Gtk::Label(name.length() > 23 ? name.substr(0, 20) + "..." : name);
-			box->add(*label);
+			auto box = new AppBox(a);
 			tmp->flowbox->add(*box);
-			tmp->app_buttons[box] = a;
 		}
 		
 		std::lock_guard<std::mutex> lock(mutex);
@@ -95,12 +98,33 @@ void AppChooser::startup() {
 	widgets->get_widget("checkbutton_appchooser", cb);
 	widgets->get_widget("scrolledwindow_appchooser", sw);
 	widgets->get_widget("appchooser_ok", select_ok);
+	widgets->get_widget("searchentry_appchooser", searchentry);
 	
 	cb->signal_toggled().connect([this]() {
 		entry->set_sensitive(cb->get_active());
 	});
+	
+	searchentry->signal_search_changed().connect([this]() {
+		filter_lower = searchentry->get_text().lowercase();
+		if(apps) apps->flowbox->invalidate_filter();
+	});
+	searchentry->signal_stop_search().connect([this]() {
+		searchentry->set_text(Glib::ustring());
+	});
 }
 
+int AppChooser::apps_sort(const Gtk::FlowBoxChild* x, const Gtk::FlowBoxChild* y) {
+	const AppBox* a = dynamic_cast<const AppBox*>(x->get_child());
+	const AppBox* b = dynamic_cast<const AppBox*>(y->get_child());
+	if(!(a && b)) return 0; // or throw an exception?
+	return a->compare(*b);
+}
+
+bool AppChooser::apps_filter(const Gtk::FlowBoxChild* x) const {
+	if(filter_lower.empty()) return true;
+	const AppBox* a = dynamic_cast<const AppBox*>(x->get_child());
+	return a && a->filter(filter_lower);
+}
 
 bool AppChooser::run(const Glib::ustring& gesture_name) {
 	if(!apps && !apps_pending) thread.join(); // in this case, the worker thread should be running
@@ -116,6 +140,8 @@ bool AppChooser::run(const Glib::ustring& gesture_name) {
 		apps->flowbox->set_valign(Gtk::ALIGN_START);
 		apps->flowbox->set_homogeneous(true);
 		apps->flowbox->set_activate_on_single_click(false);
+		apps->flowbox->set_sort_func(&apps_sort);
+		apps->flowbox->set_filter_func([this](const Gtk::FlowBoxChild* x) { return apps_filter(x); });
 		sw->add(*apps->flowbox);
 	}
 	
@@ -144,11 +170,22 @@ bool AppChooser::run(const Glib::ustring& gesture_name) {
 			auto tmp = apps->flowbox->get_selected_children();
 			if(tmp.size()) {
 				auto selected = tmp.front();
-				Gtk::Box* box = dynamic_cast<Gtk::Box*>(selected->get_child());
+				const AppBox* box = dynamic_cast<const AppBox*>(selected->get_child());
 				if(box) {
-					res_app = apps->app_buttons.at(box);
-					res_cmdline = res_app->get_executable();
-					if(res_cmdline == "env" || res_cmdline == "steam") res_cmdline = res_app->get_commandline();
+					res_app = box->get_app();
+					res_cmdline = res_app->get_commandline();
+					// remove placeholders (%f, %F, %u and %U for files, and misc; note: in theory, we should properly parse %i, %c and %k)
+					auto i = res_cmdline.begin();
+					for(auto j = res_cmdline.begin(); j != res_cmdline.end(); ++j) {
+						if(*j == '%') {
+							++j;
+							if(j == res_cmdline.end()) break;
+							if(*j != '%') continue;
+						}
+						if(j != i) *i = *j;
+						++i;
+					}
+					res_cmdline.erase(i, res_cmdline.end());
 					return true;
 				}
 			}

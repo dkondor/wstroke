@@ -30,16 +30,28 @@ class AppChooser {
 		Gtk::Dialog* dialog;
 		Gtk::HeaderBar* header;
 		Gtk::ScrolledWindow* sw;
+		Gtk::SearchEntry* searchentry;
 		Gtk::Entry* entry;
 		Gtk::CheckButton* cb;
 		Gtk::Button *select_ok;
+		Glib::ustring filter_lower;
 		
 		GAppInfoMonitor* monitor = nullptr;
+		
+		class AppBox : public Gtk::Box {
+			private:
+				Glib::RefPtr<Gio::AppInfo> app;
+				Glib::ustring name_lower;
+			public:
+				AppBox(Glib::RefPtr<Gio::AppInfo>& app_);
+				Glib::RefPtr<Gio::AppInfo> get_app() const { return app; }
+				bool filter(const Glib::ustring& filter) const { return name_lower.find(filter) != name_lower.npos; } // filter already lowercase
+				int compare(const AppBox& box) const { return name_lower.compare(box.name_lower); }
+		};
 		
 		struct AppContent {
 			std::vector<Glib::RefPtr<Gio::AppInfo> > apps;
 			std::unique_ptr<Gtk::FlowBox> flowbox;
-			std::unordered_map<Gtk::Box*, Glib::RefPtr<Gio::AppInfo> > app_buttons;
 		};
 		
 		std::unique_ptr<AppContent> apps;
@@ -58,6 +70,9 @@ class AppChooser {
 		void thread_func();
 		
 		friend void on_apps_changed(GAppInfoMonitor*, void* p);
+		
+		static int apps_sort(const Gtk::FlowBoxChild* x, const Gtk::FlowBoxChild* y);
+		bool apps_filter(const Gtk::FlowBoxChild* x) const;
 		
 	public:
 		Glib::RefPtr<Gio::AppInfo> res_app;

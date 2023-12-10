@@ -1112,7 +1112,7 @@ void Actions::update_row(const Gtk::TreeRow& row) {
 			else {
 				row[cols.arg] = _("Custom command:  ");
 				auto icon_theme = Gtk::IconTheme::get_default();
-				auto pb = icon_theme->load_icon("document-open", 32);
+				auto pb = icon_theme->load_icon("application-x-executable", 32);
 				if(pb) {
 					if(pb->get_width() > 32) pb = pb->scale_simple(32, 32, Gdk::INTERP_BILINEAR);
 					row[cols.action_icon] = pb;
@@ -1380,7 +1380,7 @@ void Actions::on_arg_editing_started(G_GNUC_UNUSED GtkCellEditable *editable, G_
 void Actions::load_command_infos_r(ActionListDiff<false>& x) {
 	x.visit_all_actions([this] (const Action* a) {
 		const Command* c = dynamic_cast<const Command*>(a);
-		if(c && !c->desktop_file.empty()) {
+		if(c && !c->desktop_file.empty() && !command_info.count(c->desktop_file)) {
 			auto dinfo = Gio::DesktopAppInfo::create_from_filename(c->desktop_file);
 			if(dinfo) {
 				CommandInfo info;
@@ -1443,6 +1443,7 @@ void Actions::try_import() {
 		
 		if(import_add->get_active()) actions.merge_actions(std::move(tmp_db));
 		else actions.overwrite_actions(std::move(tmp_db));
+		command_info.clear(); // we reload names and icons in case the list of installed apps changed
 		load_command_infos();
 		
 		update_action_list();

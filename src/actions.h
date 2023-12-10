@@ -73,7 +73,6 @@ class Actions {
 		void load_app_list(const Gtk::TreeNodeChildren &ch, ActionListDiff<false> *actions);
 		void update_action_list();
 		void update_row(const Gtk::TreeRow& row);
-//		void update_row(Gtk::TreeRow&& row) { update_row(row); }
 		void update_counts();
 		void on_remove_app();
 		

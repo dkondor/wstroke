@@ -2,6 +2,8 @@
 
 Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire). Mouse gestures are shapes drawn on the screen while holding down one of the buttons (typically the right or middle button). This plugin allows associating such gestures with various actions. See the [Wiki](https://github.com/dkondor/wstroke/wiki) for more explanations and examples.
 
+Packages for the upcoming Ubuntu 24.04 release are available here: https://launchpad.net/~kondor-dani/+archive/ubuntu/ppa-wstroke
+
 Note: this branch requires a recent version of Wayfire and wlroots (see below). For older versions, use the [wayfire-0.7 branch](https://github.com/dkondor/wstroke/tree/wayfire-0.7).
 
 ### Dependencies

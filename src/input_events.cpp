@@ -118,7 +118,7 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
 	}
 	LOGD("Emitting pointer button event");
 	wlr_pointer_button_event ev;
-    // ev.device = input_pointer;
+    ev.pointer = input_pointer;
     ev.button = button;
     ev.state = state;
     ev.time_msec = time_msec;

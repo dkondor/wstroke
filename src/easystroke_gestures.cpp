@@ -249,6 +249,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		double touchpad_last_angle = 0.0; // in radians, compared to the x axis
 		double touchpad_last_scale = 1.0; // last scale sent in a pinch gesture
 		bool next_release_touchpad = false; // if true, do not propagate the next button release event
+		bool ignore_next_own_btn = false; // allow to generate a click that will be ignored
 		uint32_t touchpad_fingers = 0; // number of fingers in the current touchpad gesture
 		
 		bool ptr_moved = false;
@@ -463,12 +464,26 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					break;
 				case View::Type::MOVE:
 					if(toplevel) {
-						wf::get_core().default_wm->move_request(toplevel);
 						/* in this case we don't refocus the original view,
 						 * since the move plugin will raise the selected view,
 						 * so it would be confusing for it not to end up
 						 * focused as well */
 						needs_refocus = false;
+						set_idle_action([this] () {
+							if(target_view) {
+								wayfire_toplevel_view toplevel = wf::toplevel_cast(target_view);
+								if(toplevel) {
+									/* we generate a "fake" click so that the move will
+									 * commence from the current pointer location */
+									ignore_next_own_btn = true;
+									uint32_t t = wf::get_current_time();
+									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_PRESSED);
+									t++;
+									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_RELEASED);
+									wf::get_core().default_wm->move_request(toplevel);
+								}
+							}
+						});
 					}
 					break;
 				case View::Type::RESIZE:
@@ -817,11 +832,17 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					next_release_touchpad = true;
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 				}
+				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
+					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 			}
 			if(ev->event->state == WLR_BUTTON_RELEASED) {
 				if(next_release_touchpad) {
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					next_release_touchpad = false;
+				}
+				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event)) {
+					ev->mode = wf::input_event_processing_mode_t::IGNORE;
+					ignore_next_own_btn = false;
 				}
 				end_touchpad();
 				end_ignore();

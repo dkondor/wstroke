@@ -2,7 +2,7 @@ project(
 	'wstroke',
 	'c',
 	'cpp',
-	version: '2.1.0',
+	version: '2.1.1',
 	license: 'MIT',
 	meson_version: '>=0.51.0',
 	default_options: [

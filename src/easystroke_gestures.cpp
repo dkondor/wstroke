@@ -644,15 +644,16 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				}
 			}
 			
-			if(!output->activate_plugin(&grab_interface, 0)) {
-				LOGE("could not activate");
-				return false;
-			}
-			input_grab->grab_input(wf::scene::layer::OVERLAY);
-			
 			/* listen to views being unmapped to handle the case when
 			 * initial_active_view or mouse_view disappears while running */
 			output->connect(&view_unmapped);
+			
+			if(!output->activate_plugin(&grab_interface, 0)) {
+				LOGE("could not activate");
+				view_unmapped.disconnect();
+				return false;
+			}
+			input_grab->grab_input(wf::scene::layer::OVERLAY);
 			
 			active = true;
 			ps.push_back(Stroke::Point{(double)x, (double)y});

@@ -1,3 +1,7 @@
+2.1.2
+=========
+* Bug fix: avoid crashing if a gesture is started on a popup
+
 2.1.1
 =========
 * WM Action / Move: avoid a spurious move of the view when the action is initiated

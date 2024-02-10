@@ -606,7 +606,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		/* focus the view under the mouse if needed -- no gesture case */
 		void check_focus_mouse_view() {
-			if(mouse_view) {
+			if(mouse_view && mouse_view != wf::get_core().seat->get_active_view()) {
 				const std::string& mode = focus_mode;
 				if(mode == "no_gesture" || mode == "always")
 					wf::get_core().default_wm->focus_raise_view(mouse_view);
@@ -639,7 +639,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				const std::string& app_id = target_view->get_app_id();
 				if(actions->exclude_app(app_id)) {
 					LOGD("Excluding strokes for app: ", app_id);
-					if(initial_active_view != mouse_view) check_focus_mouse_view();
+					check_focus_mouse_view();
 					return false;
 				}
 			}

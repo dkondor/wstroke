@@ -78,9 +78,6 @@ wayland_scanner_client = generator(
 )
 
 
-add_project_arguments(['--vapidir', meson.current_source_dir() + '/src'], language: 'vala')
-add_project_arguments(['--pkg', 'input_inhibitor'], language: 'vala')
-
 subdir('input-inhibitor')
 subdir('toplevel-grabber')
 subdir('src')

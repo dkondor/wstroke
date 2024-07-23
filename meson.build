@@ -2,6 +2,7 @@ project(
 	'wstroke',
 	'c',
 	'cpp',
+	'vala',
 	version: '2.1.2',
 	license: 'MIT',
 	meson_version: '>=0.51.0',
@@ -65,6 +66,9 @@ wayland_scanner_client = generator(
 	arguments: ['client-header', '@INPUT@', '@OUTPUT@'],
 )
 
+
+add_project_arguments(['--vapidir', meson.current_source_dir() + '/src'], language: 'vala')
+add_project_arguments(['--pkg', 'input_inhibitor'], language: 'vala')
 
 subdir('input-inhibitor')
 subdir('toplevel-grabber')

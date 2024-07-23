@@ -16,7 +16,7 @@ configure_file(input: 'config.h.in',
 # silence warnings
 cellib = static_library('cellib', 'cellrenderertextish.c',
 		dependencies: [glib, gobject, gtk, input_inhibitor_dep],
-		c_args: ['-w'])
+		c_args: ['-w', '-Wno-incompatible-function-pointer-types', '-Wno-incompatible-pointer-types'])
 
 wconf_sources = ['main.cc', 'actiondb_config.cc', 'actiondb.cc', 'actions.cc',
                  'appchooser.cc', 'gesture.cc', 'stroke_draw.cc', 'stroke.c',

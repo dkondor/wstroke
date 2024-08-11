@@ -1,3 +1,8 @@
+2.1.3
+=========
+* Add man page
+* Make rebuilding Vala code the default
+
 2.1.2
 =========
 * Bug fix: avoid crashing if a gesture is started on a popup

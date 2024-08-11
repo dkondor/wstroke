@@ -6,5 +6,5 @@ Terminal=false
 Exec=wstroke-config
 Icon=wstroke
 Categories=GTK;Utility;Accessibility;
-Comment=Configure mouse gestures
-
+Comment=Configure mouse gestures used with Wayfire
+Keywords=gestures;input;wayfire;

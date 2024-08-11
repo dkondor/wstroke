@@ -15,7 +15,7 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: https://github.com/dkondor/wstroke
-Vcs-git: https://github.com/dkondor/wstroke -b debian [debian]
+Vcs-Git: https://github.com/dkondor/wstroke -b debian [debian]
 
 Package: wstroke
 Architecture: any

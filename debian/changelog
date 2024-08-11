@@ -1,5 +1,5 @@
-wstroke (2.1.2-1) unstable; urgency=medium
+wstroke (2.1.3-1) unstable; urgency=medium
 
   * Initial release. (Closes: #1059636)
 
- -- Daniel Kondor <kondor.dani@gmail.com>  Sun, 11 Aug 2024 13:07:12 +0100
+ -- Daniel Kondor <kondor.dani@gmail.com>  Sun, 11 Aug 2024 15:22:32 +0100

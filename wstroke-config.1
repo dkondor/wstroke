@@ -1,0 +1,20 @@
+.TH WSTROKE-CONFIG 1 2024-08-11
+.SH NAME
+wstroke-config \- graphical configuration of mouse gestures
+.SH SYNOPSIS
+.BR wstroke-config
+.SH DESCRIPTION
+.BR wstroke-config
+is a graphical utility to configure gestures recognized by
+.BR wstroke ,
+a mouse gesture plugin for the
+.BR wayfire (1)
+compositor.
+Note that additional options that affect the behavior of
+.BR wstroke
+are configured using wayfire's regular config system, e.g. by
+.BR wcm.
+.SH ENVIRONMENT VARIABLES
+.BR wstroke-config
+respects the XDG_CONFIG_HOME environment variable: configuration is stored under
+${XDG_CONFIG_HOME}/wstroke.

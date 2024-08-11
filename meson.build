@@ -78,4 +78,5 @@ subdir('example')
 
 install_data('wstroke.xml', install_dir: wayfire.get_variable(pkgconfig: 'metadatadir'))
 install_data('wstroke-config.desktop', install_dir: desktop_dir)
+install_man('wstroke-config.1')
 subdir('icons')

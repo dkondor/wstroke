@@ -1,0 +1,138 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: wstroke
+Upstream-Contact: Daniel Kondor <kondor.dani@gmail.com>
+Source: <https://github.com/dkondor/wstroke>
+
+Files:     src/actiondb.cc
+           src/actiondb.h
+           src/actiondb_config.cc
+           src/actiondb_plugin.cc
+           src/actions.cc
+           src/actions.h
+           src/appchooser.cc
+           src/appchooser.h
+           src/cellrenderertextish.vala
+           src/gesture.cc
+           src/gesture.h
+           src/stroke.c
+           src/stroke.h
+           src/stroke_draw.cc
+           src/stroke_draw.h
+           src/stroke_drawing_area.cpp
+           src/stroke_drawing_area.h
+           src/gui.glade
+           src/resources.xml
+           icons/128x128/wstroke.png
+           icons/160x160/wstroke.png
+           icons/192x192/wstroke.png
+           icons/48x48/wstroke.png
+           icons/64x64/wstroke.png
+           icons/72x72/wstroke.png
+           icons/96x96/wstroke.png
+           icons/wstroke.svg
+           icons/plugin-wstroke.svg
+Copyright: 2008-2009 Thomas Jaeger <ThJaeger@gmail.com>
+           2020-2024 Daniel Kondor <kondor.dani@gmail.com>
+License:   ISC
+
+Files:     NEWS
+           README.md
+           wstroke.xml
+           src/convert_keycodes.cc
+           src/convert_keycodes.h
+           src/easystroke_gestures.cpp
+           src/input_events.cpp
+           src/input_events.hpp
+           src/main.cc
+           input-inhibitor/input_inhibitor.c
+           input-inhibitor/input_inhibitor.h
+           toplevel-grabber/toplevel-grabber-test.c
+           toplevel-grabber/toplevel-grabber.c
+           toplevel-grabber/toplevel-grabber.h
+           example/meson.build
+           icons/meson.build
+           input-inhibitor/meson.build
+           meson.build
+           src/config.h.in
+           src/input_inhibitor.vapi
+           src/meson.build
+           toplevel-grabber/meson.build
+           wstroke-config.desktop
+           wstroke-config.1
+Copyright: 2020-2024 Daniel Kondor <kondor.dani@gmail.com>
+License:   ISC
+
+Files:     input-inhibitor/wlr-input-inhibitor-unstable-v1.xml
+Copyright: 2018 Drew DeVault
+License:   mit-no-advertising
+
+Files:     toplevel-grabber/wlr-foreign-toplevel-management-unstable-v1.xml
+Copyright: 2018 Ilia Bozhinov
+License:   mit-no-advertising
+
+Files:     example/actions-wstroke-2
+           icons/convert-icons.fsh
+           debian/*
+Copyright: 2020-2024 Daniel Kondor <kondor.dani@gmail.com>
+License:   public-domain
+
+License:   ISC
+ Permission to use, copy, modify, and/or distribute this software for any
+ purpose with or without fee is hereby granted, provided that the above
+ copyright notice and this permission notice appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+License:   mit-no-advertising
+ Permission to use, copy, modify, distribute, and sell this
+ software and its documentation for any purpose is hereby granted
+ without fee, provided that the above copyright notice appear in
+ all copies and that both that copyright notice and this permission
+ notice appear in supporting documentation, and that the name of
+ the copyright holders not be used in advertising or publicity
+ pertaining to distribution of the software without specific,
+ written prior permission.  The copyright holders make no
+ representations about the suitability of this software for any
+ purpose.  It is provided "as is" without express or implied
+ warranty.
+ .
+ THE COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO THIS
+ SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS, IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+ THIS SOFTWARE.
+
+License:   public-domain
+ This is free and unencumbered software released into the public domain.
+ .
+ Anyone is free to copy, modify, publish, use, compile, sell, or
+ distribute this software, either in source code form or as a compiled
+ binary, for any purpose, commercial or non-commercial, and by any
+ means.
+ .
+ In jurisdictions that recognize copyright laws, the author or authors
+ of this software dedicate any and all copyright interest in the
+ software to the public domain. We make this dedication for the benefit
+ of the public at large and to the detriment of our heirs and
+ successors. We intend this dedication to be an overt act of
+ relinquishment in perpetuity of all present and future rights to this
+ software under copyright law.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
+ .
+ For more information, please refer to <https://unlicense.org>

@@ -1,8 +1,7 @@
 version=4
-opts="searchmode=plain, \
-  pgpmode=none, \
-  dversionmangle=auto, \
-  filenamemangle=s%.*/v?@ANY_VERSION@%@PACKAGE@-$1.tar.gz%" \
-https://api.github.com/repos/dkondor/wstroke/tags \
-https://api.github.com/repos/dkondor/wstroke/tarball/refs/tags/v@ANY_VERSION@ \
-debian
+opts="searchmode=plain,\
+downloadurlmangle=s%releases/tag/v(.*)%archive/refs/tags/v$1.tar.gz%,\
+filenamemangle=s%v?@ANY_VERSION@%@PACKAGE@-$1.tar.gz%,\
+pgpsigurlmangle=s%archive/refs/tags/v(.*)\.tar\.gz%releases/download/v$1/@PACKAGE@-$1\.tar\.gz\.asc%" \
+https://api.github.com/repos/dkondor/wstroke/releases \
+https://github.com/dkondor/wstroke/releases/tag/v?@ANY_VERSION@

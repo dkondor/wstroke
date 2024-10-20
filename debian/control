@@ -10,17 +10,18 @@ Build-Depends: debhelper-compat (= 13),
                meson,
                nlohmann-json3-dev,
                valac,
-               wayfire-dev (>= 0.8.0), wayfire-dev (<< 0.9.0),
+               wayfire-dev (>= 0.9.0), wayfire-dev (<< 0.10.0),
                libwlroots-dev (>= 0.17.0), libwlroots-dev (<< 0.18.0)
-Standards-Version: 4.6.2
+Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/dkondor/wstroke
+Vcs-Browser: https://github.com/dkondor/wstroke
 Vcs-Git: https://github.com/dkondor/wstroke -b debian [debian]
 
 Package: wstroke
 Architecture: any
 Multi-Arch: foreign
-Depends: wayfire (>= 0.8.0), wayfire (<< 0.9.0), ${misc:Depends}, ${shlibs:Depends}
+Depends: wayfire (>= 0.9.0), wayfire (<< 0.10.0), ${misc:Depends}, ${shlibs:Depends}
 Recommends: wcm
 Description: Mouse gesture plugin for Wayfire
  Mouse gestures are shapes drawn on the screen while holding down one of

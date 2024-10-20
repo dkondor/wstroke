@@ -2,14 +2,14 @@
 
 Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a plugin for [Wayfire](https://github.com/WayfireWM/wayfire). Mouse gestures are shapes drawn on the screen while holding down one of the buttons (typically the right or middle button). This plugin allows associating such gestures with various actions. See the [Wiki](https://github.com/dkondor/wstroke/wiki) for more explanations and examples.
 
-Packages for the upcoming Ubuntu 24.04 release are available here: https://launchpad.net/~kondor-dani/+archive/ubuntu/ppa-wstroke
-
-Note: this branch requires a recent version of Wayfire and wlroots (see below). For older versions, use the [wayfire-0.7 branch](https://github.com/dkondor/wstroke/tree/wayfire-0.7).
+Packages are available for:
+ - Ubuntu 24.04: https://launchpad.net/~kondor-dani/+archive/ubuntu/ppa-wstroke
+ - Debian (testing and unstable): in the official [repository](https://packages.debian.org/testing/wstroke).
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) at least version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) (see below for compiling for older Wayfire versions)
- - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) at least version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/3347) (tested with [0.16.2](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16.2)).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) or [0.9.0](https://github.com/WayfireWM/wayfire/tree/v0.9.0) (see below for compiling for older Wayfire versions)
+ - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16?ref_type=heads) or [0.17](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.17?ref_type=heads).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
@@ -30,7 +30,7 @@ If you get build errors, your Wayfire version might be too old (or too new). For
  - For older Wayfire versions of the 0.8.0 series (between commits [3cca6c9](https://github.com/WayfireWM/wayfire/commit/3cca6c9fee35ea8671da2b1c3f56ca61045ea693) and [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889)), use [this state](https://github.com/dkondor/wstroke/tree/4f2e8f00e4c734ac6fc3698bc4cfc504fe47a311) (run `git checkout 4f2e8f0` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
  - For moderately old versions of Wayfire (between commits [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889) and
  [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337)), use [this state](https://github.com/dkondor/wstroke/tree/0401b4f608c7d265a10fa2e7f4ce2dafb9caca4b)  (run `git checkout 0401b4f` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
- - For recent versions of Wayfire, use this branch (and report issues for build failures).
+ - For recent versions of Wayfire (0.8.0 or newer), use this branch (and report issues for build failures).
 
 
 ### Running

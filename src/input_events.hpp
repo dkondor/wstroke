@@ -1,7 +1,7 @@
 /*
  * input_events.hpp -- interface to generate input events in Wayfire
  * 
- * Copyright 2023 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2020-2024 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,9 +37,9 @@ class input_headless {
 		 * delete it */
 		void fini();
 		/* emit a mouse button event */
-		void pointer_button(uint32_t time_msec, uint32_t button, enum wlr_button_state state);
+		void pointer_button(uint32_t time_msec, uint32_t button, enum wl_pointer_button_state state);
 		/* emit a pointer scroll event */
-		void pointer_scroll(uint32_t time_msec, double delta, enum wlr_axis_orientation o);
+		void pointer_scroll(uint32_t time_msec, double delta, enum wl_pointer_axis o);
 		/* emit a sequence of swipe events */
 		void pointer_start_swipe(uint32_t time_msec, uint32_t fingers);
 		void pointer_update_swipe(uint32_t time_msec, uint32_t fingers, double dx, double dy);

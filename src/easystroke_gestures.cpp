@@ -435,6 +435,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				case Global::Type::SHOW_DESKTOP:
 					plugin_activator = "wm-actions/toggle_showdesktop";
 					break;
+				case Global::Type::CUBE:
+					plugin_activator = "cube/activate";
+					break;
 				case Global::Type::SHOW_CONFIG:
 					set_idle_action([] () {wf::get_core().run("wstroke-config");}, false);
 					/* fallthrough */

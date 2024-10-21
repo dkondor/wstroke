@@ -23,7 +23,7 @@ desktop_dir = join_paths(datadir, 'applications')
 # dependencies for loadable plugin
 boost    = dependency('boost', modules: ['serialization'], static: false)
 wayfire  = dependency('wayfire')
-wlroots  = dependency('wlroots')
+wlroots  = dependency('wlroots-0.18')
 wlserver = dependency('wayland-server')
 glibmm   = dependency('glibmm-2.4')
 json     = dependency('nlohmann_json', required: true)

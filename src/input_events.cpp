@@ -1,7 +1,7 @@
 /*
  * input_events.cpp -- interface to generate input events in Wayfire
  * 
- * Copyright 2023 Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright 2020-2024 Daniel Kondor <kondor.dani@gmail.com>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -48,7 +48,11 @@ static const struct wlr_keyboard_impl ws_headless_keyboard_impl = {
 void input_headless::init() {
 	auto& core = wf::compositor_core_t::get();
 	/* 1. create headless backend */
+#ifdef WSTROKE_WLR_VERSION_018
+	headless_backend = wlr_headless_backend_create(core.ev_loop);
+#else
 	headless_backend = wlr_headless_backend_create(core.display);
+#endif
 	if(!headless_backend) {
 		LOGE("Cannot create headless wlroots backend!");
 		return;
@@ -111,7 +115,7 @@ void input_headless::fini() {
 	}
 }
 
-void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wlr_button_state state) {
+void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum WSTROKE_BUTTON_STATE state) {
 	if(!(input_pointer && headless_backend)) {
 		LOGW("No input device created!");
 		return;
@@ -125,7 +129,7 @@ void input_headless::pointer_button(uint32_t time_msec, uint32_t button, enum wl
     wl_signal_emit(&(input_pointer->events.button), &ev);
 }
 
-void input_headless::pointer_scroll(uint32_t time_msec, double delta, enum wlr_axis_orientation o) {
+void input_headless::pointer_scroll(uint32_t time_msec, double delta, enum WSTROKE_AXIS_ORIENTATION o) {
 	if(!(input_pointer && headless_backend)) {
 		LOGW("No input device created!");
 		return;

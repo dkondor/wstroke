@@ -30,7 +30,7 @@ wconf = executable('wstroke-config', wconf_sources,
 
 wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', 'actiondb_plugin.cc', 'gesture.cc', 'stroke.c']
 wslib = shared_module('wstroke', wslib_sources,
-    dependencies: [wayfire, wlroots, wlserver, boost, glibmm, json],
+    dependencies: [wayfire, wlserver, boost, glibmm, json],
     install: true,
     install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],

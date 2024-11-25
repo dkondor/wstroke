@@ -8,8 +8,8 @@ Packages are available for:
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0) or [0.9.0](https://github.com/WayfireWM/wayfire/tree/v0.9.0) (see below for compiling for older Wayfire versions)
- - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16?ref_type=heads) or [0.17](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.17?ref_type=heads).
+ - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0),  [0.9.0](https://github.com/WayfireWM/wayfire/tree/v0.9.0) or the current development version (see below for compiling for older Wayfire versions)
+ - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16?ref_type=heads), [0.17](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.17?ref_type=heads) or [0.18](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.18?ref_type=heads).
  - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
@@ -32,6 +32,7 @@ If you get build errors, your Wayfire version might be too old (or too new). For
  [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337)), use [this state](https://github.com/dkondor/wstroke/tree/0401b4f608c7d265a10fa2e7f4ce2dafb9caca4b)  (run `git checkout 0401b4f` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
  - For recent versions of Wayfire (0.8.0 or newer), use this branch (and report issues for build failures).
 
+The current version supports building against wlroots versions 0.16-0.18. However, the version of wlroots should be the same that was used for building Wayfire (this should be detected during compilation). If you would like to (or need to) use wlroots 0.18, you need to use the [track-wlroots](https://github.com/WayfireWM/wayfire/tree/track-wlroots) branch of Wayfire.
 
 ### Running
 

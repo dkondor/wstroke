@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Daniel Kondor <kondor.dani@gmail.com>
+ * Copyright (c) 2020-2024, Daniel Kondor <kondor.dani@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -435,6 +435,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				case Global::Type::SHOW_DESKTOP:
 					plugin_activator = "wm-actions/toggle_showdesktop";
 					break;
+				case Global::Type::CUBE:
+					plugin_activator = "cube/activate";
+					break;
 				case Global::Type::SHOW_CONFIG:
 					set_idle_action([] () {wf::get_core().run("wstroke-config");}, false);
 					/* fallthrough */
@@ -859,14 +862,14 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					{
 						LOGD("Scroll event, dx: ", ev->event->delta_x, ", dy: ", ev->event->delta_y);
 						double delta;
-						enum wlr_axis_orientation o;
+						enum WSTROKE_AXIS_ORIENTATION o;
 						if(std::abs(ev->event->delta_x) > std::abs(ev->event->delta_y)) {
 							delta = ev->event->delta_x;
-							o = wlr_axis_orientation::WLR_AXIS_ORIENTATION_HORIZONTAL;
+							o = WSTROKE_AXIS_HORIZONTAL;
 						}
 						else {
 							delta = ev->event->delta_y;
-							o = wlr_axis_orientation::WLR_AXIS_ORIENTATION_VERTICAL;
+							o = WSTROKE_AXIS_VERTICAL;
 						}
 						input.pointer_scroll(ev->event->time_msec + 1, 0.2 * delta * touchpad_scroll_sensitivity, o);
 					}

@@ -1,3 +1,13 @@
+2.2.1
+=========
+* Fix a build issue
+* Build now requires meson version >= 1.0.0
+
+2.2.0
+=========
+* Support wlroots 0.18 (if used by Wayfire)
+* Add a "rotate cube" action
+
 2.1.3
 =========
 * Add man page

@@ -1724,7 +1724,7 @@ static Glib::ustring get_action_label(const Action* action) {
 }
 
 const char* Global::types[Global::n_actions] = { N_("None"), N_("Show expo"), N_("Scale (current workspace)"), N_("Scale (all workspaces)"),
-	N_("Configure gestures"), N_("Toggle show desktop") };
+	N_("Configure gestures"), N_("Toggle show desktop"), N_("Rotate cube (interactive)") };
 
 const char* Global::get_type_str(Type type) { return types[static_cast<int>(type)]; }
 

@@ -3,9 +3,9 @@ project(
 	'c',
 	'cpp',
 	'vala',
-	version: '2.1.3',
+	version: '2.2.1',
 	license: 'MIT',
-	meson_version: '>=0.51.0',
+	meson_version: '>=1.0.0',
 	default_options: [
 		'cpp_std=c++17',
         'c_std=c11',
@@ -22,8 +22,19 @@ desktop_dir = join_paths(datadir, 'applications')
 
 # dependencies for loadable plugin
 boost    = dependency('boost', modules: ['serialization'], static: false)
-wayfire  = dependency('wayfire')
-wlroots  = dependency('wlroots')
+wayfire  = dependency('wayfire', version: '>=0.8.0')
+wayfire_deps_cmd = run_command('pkg-config', '--print-requires', 'wayfire', check: true)
+wayfire_deps = wayfire_deps_cmd.stdout().split('\n')
+if 'wlroots' in wayfire_deps
+  message('Using wlroots version < 0.18')
+  wlroots  = dependency('wlroots')
+elif 'wlroots-0.18' in wayfire_deps
+  message('Using wlroots version 0.18')
+  wlroots  = dependency('wlroots-0.18')
+else
+  error('Cannot find supported wlroots dependency')
+endif
+wlroots_headers = wlroots.partial_dependency(includes: true, compile_args: true)
 wlserver = dependency('wayland-server')
 glibmm   = dependency('glibmm-2.4')
 json     = dependency('nlohmann_json', required: true)

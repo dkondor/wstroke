@@ -31,7 +31,6 @@
 #include <wayfire/plugins/common/input-grab.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
-#include <nlohmann/json.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
@@ -493,16 +492,28 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, get_resize_edges());
 					break;
 				case View::Type::FULLSCREEN:
-					if(toplevel) call_plugin("wm-actions/set-fullscreen", true, { {"state", !toplevel->toplevel()->current().fullscreen} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->toplevel()->current().fullscreen;
+						call_plugin("wm-actions/set-fullscreen", true, std::move(tmp));
+					}
 					break;
 				case View::Type::SEND_TO_BACK:
 					call_plugin("wm-actions/send-to-back", true);
 					break;
 				case View::Type::ALWAYS_ON_TOP:
-					call_plugin("wm-actions/set-always-on-top", true, { {"state", !target_view->has_data("wm-actions-above")} });
+					{
+						wf::json_t tmp;
+						tmp["state"] = !target_view->has_data("wm-actions-above");
+						call_plugin("wm-actions/set-always-on-top", true, std::move(tmp));
+					}
 					break;
 				case View::Type::STICKY:
-					if(toplevel) call_plugin("wm-actions/set-sticky", true, { {"state", !toplevel->sticky} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->sticky;
+						call_plugin("wm-actions/set-sticky", true, std::move(tmp));
+					}
 					break;
 				default:
 					break;
@@ -597,7 +608,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* call a plugin activator -- do this from the idle_call, so 
 		 * that our grab interface does not get in the way; also take
 		 * care of refocusing the original view if needed */
-		void call_plugin(const std::string& plugin_activator, bool include_view = false, nlohmann::json data = nlohmann::json()) {
+		void call_plugin(const std::string& plugin_activator, bool include_view = false, wf::json_t&& data = wf::json_t()) {
 			data["output_id"] = output->get_id();
 			if(include_view) data["view_id"] = target_view->get_id();
 			set_idle_action([this, plugin_activator, data] () {

@@ -37,7 +37,6 @@ endif
 wlroots_headers = wlroots.partial_dependency(includes: true, compile_args: true)
 wlserver = dependency('wayland-server')
 glibmm   = dependency('glibmm-2.4')
-json     = dependency('nlohmann_json', required: true)
 
 # additional dependencies for GUI
 gtkmm    = dependency('gtkmm-3.0')

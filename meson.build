@@ -3,7 +3,7 @@ project(
 	'c',
 	'cpp',
 	'vala',
-	version: '2.2.1',
+	version: '2.3.0',
 	license: 'MIT',
 	meson_version: '>=1.0.0',
 	default_options: [

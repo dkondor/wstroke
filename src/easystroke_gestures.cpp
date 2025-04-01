@@ -31,7 +31,6 @@
 #include <wayfire/plugins/common/input-grab.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
-#include <nlohmann/json.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
@@ -334,7 +333,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* pointer tracking interface */
 		void handle_pointer_button(const wlr_pointer_button_event& event) override {
 			wf::buttonbinding_t tmp = initiate;
-			if(event.button == tmp.get_button() && event.state == WLR_BUTTON_RELEASED) {
+			if(event.button == tmp.get_button() && event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
 				if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
 				else end_stroke();
 			}
@@ -410,9 +409,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
 					input.keyboard_mods(mod, 0, 0);
 				}
-				input.pointer_button(t, btn, WLR_BUTTON_PRESSED);
+				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_PRESSED);
 				t++;
-				input.pointer_button(t, btn, WLR_BUTTON_RELEASED);
+				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_RELEASED);
 				if(mod) {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					input.keyboard_mods(0, 0, 0);
@@ -480,9 +479,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 									 * commence from the current pointer location */
 									ignore_next_own_btn = true;
 									uint32_t t = wf::get_current_time();
-									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_PRESSED);
+									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
 									t++;
-									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_RELEASED);
+									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
 									wf::get_core().default_wm->move_request(toplevel);
 								}
 							}
@@ -493,16 +492,28 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, get_resize_edges());
 					break;
 				case View::Type::FULLSCREEN:
-					if(toplevel) call_plugin("wm-actions/set-fullscreen", true, { {"state", !toplevel->toplevel()->current().fullscreen} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->toplevel()->current().fullscreen;
+						call_plugin("wm-actions/set-fullscreen", true, std::move(tmp));
+					}
 					break;
 				case View::Type::SEND_TO_BACK:
 					call_plugin("wm-actions/send-to-back", true);
 					break;
 				case View::Type::ALWAYS_ON_TOP:
-					call_plugin("wm-actions/set-always-on-top", true, { {"state", !target_view->has_data("wm-actions-above")} });
+					{
+						wf::json_t tmp;
+						tmp["state"] = !target_view->has_data("wm-actions-above");
+						call_plugin("wm-actions/set-always-on-top", true, std::move(tmp));
+					}
 					break;
 				case View::Type::STICKY:
-					if(toplevel) call_plugin("wm-actions/set-sticky", true, { {"state", !toplevel->sticky} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->sticky;
+						call_plugin("wm-actions/set-sticky", true, std::move(tmp));
+					}
 					break;
 				default:
 					break;
@@ -597,7 +608,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* call a plugin activator -- do this from the idle_call, so 
 		 * that our grab interface does not get in the way; also take
 		 * care of refocusing the original view if needed */
-		void call_plugin(const std::string& plugin_activator, bool include_view = false, nlohmann::json data = nlohmann::json()) {
+		void call_plugin(const std::string& plugin_activator, bool include_view = false, wf::json_t&& data = wf::json_t()) {
 			data["output_id"] = output->get_id();
 			if(include_view) data["view_id"] = target_view->get_id();
 			set_idle_action([this, plugin_activator, data] () {
@@ -754,8 +765,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);
-					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
-					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
+					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
+					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
 					output->add_button(initiate, &stroke_initiate);
 					view_unmapped.disconnect();
 				});
@@ -831,7 +842,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>> on_raw_pointer_button =
 				[=] (wf::input_event_signal<wlr_pointer_button_event> *ev) {
-			if(ev->event->state == WLR_BUTTON_PRESSED) {
+			if(ev->event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
 				if(touchpad_active != Touchpad::Type::NONE) {
 					next_release_touchpad = true;
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
@@ -839,7 +850,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 			}
-			if(ev->event->state == WLR_BUTTON_RELEASED) {
+			if(ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 				if(next_release_touchpad) {
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					next_release_touchpad = false;

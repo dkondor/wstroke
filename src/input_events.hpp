@@ -29,21 +29,10 @@ extern "C" {
 #include <wayland-server-protocol.h>
 }
 
-#if (WLR_VERSION_NUM >= 4608)
-#define WLR_BUTTON_RELEASED        WL_POINTER_BUTTON_STATE_RELEASED
-#define WLR_BUTTON_PRESSED         WL_POINTER_BUTTON_STATE_PRESSED
 #define WSTROKE_AXIS_HORIZONTAL    wl_pointer_axis::WL_POINTER_AXIS_HORIZONTAL_SCROLL
 #define WSTROKE_AXIS_VERTICAL      wl_pointer_axis::WL_POINTER_AXIS_VERTICAL_SCROLL
-#define WLR_AXIS_SOURCE_CONTINUOUS WL_POINTER_AXIS_SOURCE_CONTINUOUS
 #define WSTROKE_BUTTON_STATE       wl_pointer_button_state
 #define WSTROKE_AXIS_ORIENTATION   wl_pointer_axis
-#define WSTROKE_WLR_VERSION_018
-#else
-#define WSTROKE_AXIS_HORIZONTAL    wlr_axis_orientation::WLR_AXIS_ORIENTATION_HORIZONTAL
-#define WSTROKE_AXIS_VERTICAL      wlr_axis_orientation::WLR_AXIS_ORIENTATION_VERTICAL
-#define WSTROKE_BUTTON_STATE       wlr_button_state
-#define WSTROKE_AXIS_ORIENTATION   wlr_axis_orientation
-#endif
 
 class input_headless {
 	public:

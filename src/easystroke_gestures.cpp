@@ -78,7 +78,7 @@ class ws_node;
 class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node> {
 	public:
 		/* render the current content of the overlay texture */
-		void render(const wf::render_target_t& target, const wf::region_t& region) override;
+		void render(const wf::scene::render_instruction_t& data) override;
 		
 		ws_render_instance(ws_node *self, wf::scene::damage_callback push_damage, wf::output_t *output) :
 			wf::scene::simple_render_instance_t<ws_node>(self, push_damage, output) { }
@@ -87,38 +87,44 @@ class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node> {
 
 /* node to draw lines on the screen, a simplified version of annotate */
 class ws_node : public wf::scene::node_t {
+	private:
+		/* We check whether EGL backend is used when creating this instance.
+		 * If not, every operation is a no-op.
+		 */
+		const bool is_egl;
+	
 	public:
 		wf::output_t* const output;
-		/* current annotation to be rendered -- store it in a framebuffer */
-		wf::framebuffer_t fb;
+		/* current annotation to be rendered -- store it in an auxiliary buffer */
+		wf::auxilliary_buffer_t fb;
 		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
 		wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
 		OpenGL::program_t color_program;
 		
-		ws_node(wf::output_t* output_) : node_t(false), output(output_) {
-			/* copied from opengl.cpp */
-			OpenGL::render_begin();
-			color_program.set_simple(OpenGL::compile_program(
-				default_vertex_shader_source, color_rect_fragment_source));
-			OpenGL::render_end();
+		ws_node(wf::output_t* output_) : node_t(false), is_egl(wf::get_core().is_gles2()), output(output_) {
+			if (!is_egl) return;
+			wf::gles::run_in_context([&] {
+				color_program.set_simple(OpenGL::compile_program(
+					default_vertex_shader_source, color_rect_fragment_source));
+			});
 		}
 				
 		/* allocate frambuffer for storing the drawings if it
 		 * has not been allocated yet, according to the current
 		 * output size */
 		bool ensure_fb() {
-			bool ret = true;
-			if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
-				auto dim = output->get_screen_size();
-				OpenGL::render_begin();
-				ret = fb.allocate(dim.width, dim.height);
-				if(ret) {
-					fb.bind(); // bind buffer to clear it
+			if(!is_egl) return false;
+			auto dim = output->get_screen_size();
+			auto ret = fb.allocate(dim); //!! TODO: is it guaranteed that this will allocate an EGL buffer?
+			
+			if (ret == wf::buffer_reallocation_result_t::REALLOCATED) {
+				wf::gles::run_in_context([&] {
+					wf::gles::bind_render_buffer(fb.get_renderbuffer());
 					OpenGL::clear({0, 0, 0, 0});
-				}
-				OpenGL::render_end();
+				});
 			}
-			return ret;
+			
+			return (ret != wf::buffer_reallocation_result_t::FAILED);
 		}
 		
 		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
@@ -132,19 +138,21 @@ class ws_node : public wf::scene::node_t {
 		 * allocates the overlay texture if necessary and activates rendering */
 		void draw_line(int x1, int y1, int x2, int y2) {
 			if(stroke_width == 0) return;
-			if(!ensure_fb()) return;
+			if(!ensure_fb()) return; // will return false if not using EGL
 			
 			wf::dimensions_t dim = output->get_screen_size();
-			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
+			auto ortho = glm::ortho(0.0f, (float)dim.width, 0.0f, (float)dim.height);
 			
-			OpenGL::render_begin(fb);
-			GL_CALL(glLineWidth((float)stroke_width));
-			GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
-			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
-			OpenGL::render_end();
+			wf::gles::run_in_context([&] {
+				wf::gles::bind_render_buffer(fb.get_renderbuffer());
+				GL_CALL(glLineWidth((float)stroke_width));
+				GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
+				render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
+			});
 			
 			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
 			pad_damage_rect(d, stroke_width);
+			
 			wf::scene::node_damage_signal ev;
 			ev.region = d; /* note: implicit conversion to wf::region_t */
 			this->emit(&ev);
@@ -152,13 +160,12 @@ class ws_node : public wf::scene::node_t {
 		
 		/* clear everything rendered by this plugin and deallocate the framebuffer */
 		void clear_lines() {
-			fb.release();
+			fb.free();
 			output->render->damage_whole();
 		}
 		
 		/* render a sequence of vertices, using the given color 
-		 * should only be called between OpenGL::render_begin() and
-		 * OpenGL::render_end() */
+		 * should only be called in wf::gles::run_in_context() */
 		void render_vertices(GLfloat* vertexData, GLsizei nvertices,
 			wf::color_t color, GLenum mode, glm::mat4 matrix)
 		{
@@ -177,7 +184,8 @@ class ws_node : public wf::scene::node_t {
 		
 		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
 				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
-			if(shown_on == output) instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+			if(is_egl && shown_on == output)
+				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
 		}
 		
 		wf::geometry_t get_bounding_box() override {
@@ -187,16 +195,10 @@ class ws_node : public wf::scene::node_t {
 };
 
 
-void ws_render_instance::render(const wf::render_target_t& target, const wf::region_t& region) {
-	if(this->self->fb.tex == (GLuint)-1) return;
+void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
+	if(!this->self->fb.get_buffer()) return;
 	auto geometry = this->self->output->get_relative_geometry();
-	
-	OpenGL::render_begin(target);
-	for (auto& box : region) {
-		target.logic_scissor(wlr_box_from_pixman_box(box));
-		OpenGL::render_texture(this->self->fb.tex, target, geometry);
-	}
-	OpenGL::render_end();
+	data.pass->add_texture(wf::texture_t{this->self->fb.get_texture()}, data.target, geometry, data.damage);
 }
 
 

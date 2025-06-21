@@ -36,10 +36,15 @@
 #include <memory>
 #include <filesystem>
 
+#include <cairo.h>
+#include <pixman.h>
+#include <drm_fourcc.h>
+
 #include <linux/input-event-codes.h>
 extern "C"
 {
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/render/pixman.h>
 }
 
 
@@ -228,6 +233,171 @@ class ws_node_egl : public ws_node_base {
 };
 
 
+class ws_node_pixman : public ws_node_base {
+	private:
+		cairo_t *ctx = nullptr;
+		cairo_surface_t *surface = nullptr;
+		wf::texture_t texture;
+		
+		
+		bool ensure_surface() {
+			auto dim = output->get_screen_size();
+			
+			if(surface) {
+				if(cairo_image_surface_get_height(surface) != dim.height ||
+						cairo_image_surface_get_width(surface) != dim.width) {
+					free_texture();
+					free_cairo();
+				}
+			}
+			
+			if(!surface) {
+				surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, dim.width, dim.height);
+				if(!surface) return false;
+				ctx = cairo_create(surface);
+				clear_overlay();
+				cairo_surface_flush(surface);
+				// note: in this case, we should have texture.texture == nullptr
+			}
+			
+			if(!texture.texture) {
+				texture.texture = wlr_texture_from_pixels(wf::get_core().renderer,
+					DRM_FORMAT_ARGB8888, cairo_image_surface_get_stride(surface),
+					dim.width, dim.height, cairo_image_surface_get_data(surface));
+				return (texture.texture != nullptr);
+			}
+			return true;
+		}
+		
+		void clear_overlay() {
+			cairo_set_source_rgba(ctx, 0, 0, 0, 0);
+			cairo_set_operator(ctx, CAIRO_OPERATOR_SOURCE);
+			cairo_paint(ctx);
+		}
+		
+		void free_texture() {
+			if(texture.texture) {
+				wlr_texture_destroy(texture.texture);
+				texture.texture = nullptr;
+			}
+		}
+		
+		void free_cairo() {
+			if(ctx) {
+				cairo_destroy(ctx);
+				ctx = nullptr;
+			}
+			if(surface) {
+				cairo_surface_destroy(surface);
+				surface = nullptr;
+			}
+		}
+	
+	public:
+		ws_node_pixman(wf::output_t* output_) : ws_node_base(output_) {
+			/* nothing else to do, we will allocate a buffer when first drawing */			
+		}
+		
+		~ws_node_pixman() {
+			/* Destroy our texture first, as it might refer to the same memory
+			 * as our cairo surface. */
+			free_texture();
+			free_cairo();
+		}
+		
+		
+		void draw_line(int x1, int y1, int x2, int y2) override {
+			if(stroke_width == 0) return;
+			if(!ensure_surface()) return;
+			
+			wf::color_t color = stroke_color;
+			cairo_set_line_width(ctx, stroke_width);
+			cairo_set_source_rgba(ctx, color.r, color.g, color.b, color.a);
+			cairo_move_to(ctx, x1, y1);
+			cairo_line_to(ctx, x2, y2);
+			cairo_stroke(ctx);
+			cairo_surface_flush(surface);
+			
+			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
+			pad_damage_rect(d, stroke_width);
+			
+			/* Copy the damaged area to our texture if needed, which is a pixman image */
+			pixman_image_t *img = wlr_pixman_texture_get_image(texture.texture);
+			if(!img) {
+				LOGE("Cannot access pixman texture data!");
+				return;
+			}
+			
+			if (pixman_image_get_format(img) != PIXMAN_a8r8g8b8) {
+				// should not happen, img should be a copy of our data
+				LOGE("Pixman texture data in incorrect format!");
+				return;
+			}
+			
+			uint8_t *dst = (uint8_t*)pixman_image_get_data(img);
+			int stride_dst = pixman_image_get_stride(img);
+			uint8_t *src = cairo_image_surface_get_data(surface);
+			int stride_src = cairo_image_surface_get_stride(surface);
+			
+			if(dst != src) {
+				/**
+				 * Note: when creating a texture with wlr_texture_from_pixels(),
+				 * wlroots will just keep the original data (wrapping it in a
+				 * wlr_texture), so the changes made here will be automatically
+				 * visible and there is no need to copy them. However, it also
+				 * creates a wlr_buffer with a copy of the data and it is unclear
+				 * to me when / if that is used, so keep the option to copy the
+				 * damaged regions if needed.
+				 * 
+				 * Note: wf::geometry_t is a wlr_box which has the following definition:
+				struct wlr_box {
+					int x, y;
+					int width, height;
+				};
+				*/
+				
+				// copy our data
+				for(int y = d.y; y < d.y + d.height; y++) {
+					size_t base_src = y * stride_src;
+					size_t base_dst = y * stride_dst;
+					for(int x = d.x; x < d.x + d.width; x++) {
+						// note: 4 bytes per pixel
+						dst[base_dst + x * 4]     = src[base_src + x * 4];
+						dst[base_dst + x * 4 + 1] = src[base_src + x * 4 + 1];
+						dst[base_dst + x * 4 + 2] = src[base_src + x * 4 + 2];
+						dst[base_dst + x * 4 + 3] = src[base_src + x * 4 + 3];
+					}
+				}
+			}
+			
+			wf::scene::node_damage_signal ev;
+			ev.region = d; /* note: implicit conversion to wf::region_t */
+			this->emit(&ev);
+		}
+		
+		void clear_lines() override {
+			free_texture();
+			if(ctx) clear_overlay();
+			output->render->damage_whole();
+		}
+		
+		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
+				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
+			if(shown_on == output)
+				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+		}
+		
+		wf::geometry_t get_bounding_box() override {
+			wf::dimensions_t dim = output->get_screen_size();
+			return {0, 0, dim.width, dim.height};
+		}
+		
+		wf::texture_t get_texture() override {
+			return texture;
+		}
+};
+
+
 void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
 	auto texture = this->self->get_texture();
 	if(!texture.texture) return;
@@ -241,6 +411,9 @@ void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
 static std::shared_ptr<ws_node_base> get_ws_node(wf::output_t* output_) {
 	if(wf::get_core().is_gles2())
 		return std::shared_ptr<ws_node_base>(new ws_node_egl(output_));
+	
+	if(wlr_renderer_is_pixman(wf::get_core().renderer))
+		return std::shared_ptr<ws_node_base>(new ws_node_pixman(output_));
 	
 	/* TODO: create derived nodes Pixman (and Vulkan) case! */
 	return std::shared_ptr<ws_node_base>(new ws_node_base(output_));

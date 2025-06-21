@@ -38,7 +38,7 @@
 
 #include <cairo.h>
 #include <pixman.h>
-#include <drm_fourcc.h>
+#include <drm_fourcc.h> // for DRM_FORMAT_ARGB8888
 
 #include <linux/input-event-codes.h>
 extern "C"
@@ -233,13 +233,15 @@ class ws_node_egl : public ws_node_base {
 };
 
 
-class ws_node_pixman : public ws_node_base {
-	private:
+/* Base class for pixman and vulkan cases, strokes are drawn with Cairo and
+ * converted to a wlr_texture to use later. */
+class ws_node_cairo : public ws_node_base {
+	protected:
 		cairo_t *ctx = nullptr;
 		cairo_surface_t *surface = nullptr;
 		wf::texture_t texture;
-		
-		
+	
+	private:
 		bool ensure_surface() {
 			auto dim = output->get_screen_size();
 			
@@ -260,12 +262,6 @@ class ws_node_pixman : public ws_node_base {
 				// note: in this case, we should have texture.texture == nullptr
 			}
 			
-			if(!texture.texture) {
-				texture.texture = wlr_texture_from_pixels(wf::get_core().renderer,
-					DRM_FORMAT_ARGB8888, cairo_image_surface_get_stride(surface),
-					dim.width, dim.height, cairo_image_surface_get_data(surface));
-				return (texture.texture != nullptr);
-			}
 			return true;
 		}
 		
@@ -293,18 +289,31 @@ class ws_node_pixman : public ws_node_base {
 			}
 		}
 	
+	protected:
+		/* create our wlr_texture from our cairo surface */
+		bool create_texture() {
+			free_texture();
+			texture.texture = wlr_texture_from_pixels(wf::get_core().renderer,
+				DRM_FORMAT_ARGB8888, cairo_image_surface_get_stride(surface),
+				cairo_image_surface_get_width(surface),
+				cairo_image_surface_get_height(surface),
+				cairo_image_surface_get_data(surface));
+			return (texture.texture != nullptr);
+		}
+		
+		virtual bool update_texture(const wf::geometry_t& d) = 0;
+	
 	public:
-		ws_node_pixman(wf::output_t* output_) : ws_node_base(output_) {
+		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_) {
 			/* nothing else to do, we will allocate a buffer when first drawing */			
 		}
 		
-		~ws_node_pixman() {
+		~ws_node_cairo() {
 			/* Destroy our texture first, as it might refer to the same memory
 			 * as our cairo surface. */
 			free_texture();
 			free_cairo();
 		}
-		
 		
 		void draw_line(int x1, int y1, int x2, int y2) override {
 			if(stroke_width == 0) return;
@@ -321,17 +330,54 @@ class ws_node_pixman : public ws_node_base {
 			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
 			pad_damage_rect(d, stroke_width);
 			
+			bool res;
+			if(!texture.texture) res = create_texture();
+			else res = update_texture(d);
+			
+			if(res) {
+				wf::scene::node_damage_signal ev;
+				ev.region = d; /* note: implicit conversion to wf::region_t */
+				this->emit(&ev);
+			}
+		}
+		
+		void clear_lines() override {
+			free_texture();
+			if(ctx) clear_overlay();
+			output->render->damage_whole();
+		}
+		
+		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
+				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
+			if(shown_on == output)
+				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+		}
+		
+		wf::geometry_t get_bounding_box() override {
+			wf::dimensions_t dim = output->get_screen_size();
+			return {0, 0, dim.width, dim.height};
+		}
+		
+		wf::texture_t get_texture() override {
+			return texture;
+		}
+};
+
+class ws_node_pixman : public ws_node_cairo {
+	
+	protected:
+		bool update_texture(const wf::geometry_t& d) override {
 			/* Copy the damaged area to our texture if needed, which is a pixman image */
 			pixman_image_t *img = wlr_pixman_texture_get_image(texture.texture);
 			if(!img) {
 				LOGE("Cannot access pixman texture data!");
-				return;
+				return false;
 			}
 			
 			if (pixman_image_get_format(img) != PIXMAN_a8r8g8b8) {
 				// should not happen, img should be a copy of our data
 				LOGE("Pixman texture data in incorrect format!");
-				return;
+				return false;
 			}
 			
 			uint8_t *dst = (uint8_t*)pixman_image_get_data(img);
@@ -370,32 +416,30 @@ class ws_node_pixman : public ws_node_base {
 				}
 			}
 			
-			wf::scene::node_damage_signal ev;
-			ev.region = d; /* note: implicit conversion to wf::region_t */
-			this->emit(&ev);
+			return true;
 		}
-		
-		void clear_lines() override {
-			free_texture();
-			if(ctx) clear_overlay();
-			output->render->damage_whole();
-		}
-		
-		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
-				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
-			if(shown_on == output)
-				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
-		}
-		
-		wf::geometry_t get_bounding_box() override {
-			wf::dimensions_t dim = output->get_screen_size();
-			return {0, 0, dim.width, dim.height};
-		}
-		
-		wf::texture_t get_texture() override {
-			return texture;
-		}
+	
+	public:
+		ws_node_pixman(wf::output_t* output_) : ws_node_cairo(output_) { }
 };
+
+class ws_node_vulkan : public ws_node_cairo {
+	
+	protected:
+		bool update_texture(const wf::geometry_t& d) override {
+			/* I don't know how to update only part of a Vulkan-based wlr_texture,
+			 * so we just recreate the whole thing. This means re-uploading the
+			 * full surface to the GPU again unfortunately.
+			 * TODO: throttle this to some reasonable rate (e.g. display refresh rate, 30Hz, etc.)?
+			 * (Not that important since this will be called for full pixel steps anyway)
+			 * Note: create_texture() will free up the current texture. */
+			return create_texture();
+		}
+	
+	public:
+		ws_node_vulkan(wf::output_t* output_) : ws_node_cairo(output_) { }
+};
+
 
 
 void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
@@ -412,10 +456,12 @@ static std::shared_ptr<ws_node_base> get_ws_node(wf::output_t* output_) {
 	if(wf::get_core().is_gles2())
 		return std::shared_ptr<ws_node_base>(new ws_node_egl(output_));
 	
+	if(wf::get_core().is_vulkan())
+		return std::shared_ptr<ws_node_base>(new ws_node_vulkan(output_));
+	
 	if(wlr_renderer_is_pixman(wf::get_core().renderer))
 		return std::shared_ptr<ws_node_base>(new ws_node_pixman(output_));
 	
-	/* TODO: create derived nodes Pixman (and Vulkan) case! */
 	return std::shared_ptr<ws_node_base>(new ws_node_base(output_));
 }
 

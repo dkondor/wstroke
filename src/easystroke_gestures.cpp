@@ -424,20 +424,32 @@ class ws_node_pixman : public ws_node_cairo {
 };
 
 class ws_node_vulkan : public ws_node_cairo {
+	private:
+		bool need_update = false;
 	
 	protected:
 		bool update_texture(const wf::geometry_t& d) override {
-			/* I don't know how to update only part of a Vulkan-based wlr_texture,
-			 * so we just recreate the whole thing. This means re-uploading the
-			 * full surface to the GPU again unfortunately.
-			 * TODO: throttle this to some reasonable rate (e.g. display refresh rate, 30Hz, etc.)?
-			 * (Not that important since this will be called for full pixel steps anyway)
-			 * Note: create_texture() will free up the current texture. */
-			return create_texture();
+			/* Just mark that we need to update the overlay texture. It
+			 * will be recreated (re-uploaded to the GPU) at the next render.
+			 * This way, we have maximum one texture upload per render cycle. */
+			need_update = true;
+			return true;
 		}
 	
 	public:
 		ws_node_vulkan(wf::output_t* output_) : ws_node_cairo(output_) { }
+		
+		wf::texture_t get_texture() override {
+			/* I don't know how to update only part of a Vulkan-based wlr_texture,
+			 * so we just recreate the whole thing. This means re-uploading the
+			 * full surface to the GPU again unfortunately.
+			 * Note: create_texture() will free up the current texture. */
+			if(need_update) {
+				create_texture();
+				need_update = false;
+			}
+			return texture;
+		}
 };
 
 

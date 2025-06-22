@@ -240,6 +240,8 @@ class ws_node_cairo : public ws_node_base {
 		cairo_t *ctx = nullptr;
 		cairo_surface_t *surface = nullptr;
 		wf::texture_t texture;
+		// account for whether we have rendered at least once (needed by the pixman renderer)
+		bool first_render_done = false;
 	
 	private:
 		bool ensure_surface() {
@@ -276,6 +278,7 @@ class ws_node_cairo : public ws_node_base {
 				wlr_texture_destroy(texture.texture);
 				texture.texture = nullptr;
 			}
+			first_render_done = false;
 		}
 		
 		void free_cairo() {
@@ -364,9 +367,65 @@ class ws_node_cairo : public ws_node_base {
 };
 
 class ws_node_pixman : public ws_node_cairo {
-	
+	private:
+		wf::geometry_t damage_acc{};
+		wf::wl_idle_call idle_damage;
+		
+		void extend_damage(const wf::geometry_t& d) {
+			if(damage_acc.width == 0 && damage_acc.height == 0) {
+				damage_acc = d;
+				return;
+			}
+			if(d.width == 0 && d.height == 0) return;
+			int x1 = std::min(d.x, damage_acc.x);
+			int y1 = std::min(d.y, damage_acc.y);
+			int x2 = std::max(d.x + d.width,  damage_acc.x + damage_acc.width);
+			int y2 = std::max(d.y + d.height, damage_acc.y + damage_acc.height);
+			damage_acc = {x1, y1, x2 - x1, y2 - y1};
+		}
+		
 	protected:
 		bool update_texture(const wf::geometry_t& d) override {
+			/**
+			 * wlroots' pixman renderer works with the following quirks when
+			 * using a texture created with wlr_texture_from_pixels():
+			 *  1. First a wlr_readonly_data_buffer is created which just encapsulates
+			 *      whatever data it gets (so it is just a wrapper around our cairo
+			 *      surface at this point)
+			 *  2. Then, a wlr_pixman_texture is created from this buffer. This creates
+			 *      a pixman_image_t that also wraps our cairo surface.
+			 *  3. After this, the buffer is "dropped". Instead of actually freeing
+			 *      it up, it is kept around (saved in the texture), but its data
+			 *      pointer is replaced by a newly created copy of the original data.
+			 *  4. Thus at this point, we have two copies of our image data:
+			 *     -- texture->image, which just wraps our cairo surface
+			 *     -- texture->buffer, which has a copy
+			 *  5. When we try to render this texture, the pixman renderer compares
+			 *      the above two data pointers, and decides that the pixman image
+			 *      is "out of date". This is motivated by the fact that if working
+			 *      with a buffer supplied by a Wayland client, its data pointer
+			 *      can indeed change.
+			 *  6. The pixman renderer deals with this by destroying the original
+			 *      pixman image and creating a new one which now wraps the data
+			 *      pointer in the wlr_buffer (i.e. which is a copy of the original
+			 *      image we submitted when creating the texture).
+			 * This means that any changes to the image (i.e. our cairo surface)
+			 * between steps #4 and #5 (between wlr_texture_from_pixels() and the
+			 * first time we actually render it) will not be visible.
+			 * 
+			 * To account for the above, we need to track any such changes and redo
+			 * the copy after we have done at least one render pass.
+			 * 
+			 * Note: this means that we likely should not rely on being able to
+			 * change the content of a wlr_texture after it has been created, but
+			 * we do not want to recreate it every time when the stroke is updated.
+			 */
+			
+			extend_damage(d);
+			
+			/* If we have not rendered first, we just make note of the newly damaged area (as above). */
+			if(!first_render_done) return true;
+			
 			/* Copy the damaged area to our texture if needed, which is a pixman image */
 			pixman_image_t *img = wlr_pixman_texture_get_image(texture.texture);
 			if(!img) {
@@ -386,27 +445,19 @@ class ws_node_pixman : public ws_node_cairo {
 			int stride_src = cairo_image_surface_get_stride(surface);
 			
 			if(dst != src) {
-				/**
-				 * Note: when creating a texture with wlr_texture_from_pixels(),
-				 * wlroots will just keep the original data (wrapping it in a
-				 * wlr_texture), so the changes made here will be automatically
-				 * visible and there is no need to copy them. However, it also
-				 * creates a wlr_buffer with a copy of the data and it is unclear
-				 * to me when / if that is used, so keep the option to copy the
-				 * damaged regions if needed.
-				 * 
-				 * Note: wf::geometry_t is a wlr_box which has the following definition:
-				struct wlr_box {
-					int x, y;
-					int width, height;
-				};
-				*/
+				/** Based on the above, we expect this case. */
 				
-				// copy our data
-				for(int y = d.y; y < d.y + d.height; y++) {
+				/* copy our data
+				 * Note: wf::geometry_t is a wlr_box which has the following definition:
+					struct wlr_box {
+						int x, y;
+						int width, height;
+					};
+				 */
+				for(int y = damage_acc.y; y < damage_acc.y + damage_acc.height; y++) {
 					size_t base_src = y * stride_src;
 					size_t base_dst = y * stride_dst;
-					for(int x = d.x; x < d.x + d.width; x++) {
+					for(int x = damage_acc.x; x < damage_acc.x + damage_acc.width; x++) {
 						// note: 4 bytes per pixel
 						dst[base_dst + x * 4]     = src[base_src + x * 4];
 						dst[base_dst + x * 4 + 1] = src[base_src + x * 4 + 1];
@@ -416,11 +467,33 @@ class ws_node_pixman : public ws_node_cairo {
 				}
 			}
 			
+			/* reset previous damage */
+			damage_acc = {0, 0, 0, 0};
+			
 			return true;
 		}
 	
 	public:
 		ws_node_pixman(wf::output_t* output_) : ws_node_cairo(output_) { }
+		
+		wf::texture_t get_texture() override {
+			/* This is called from the render() function, so we set here
+			 * that the first render pass was done, but also we schedule
+			 * an update to the now updated texture and re-submit the
+			 * accummulated damage. */
+			if(!first_render_done && texture.texture) {
+				idle_damage.run_once([this] () {
+					if(texture.texture) {
+						wf::scene::node_damage_signal ev;
+						ev.region = damage_acc;
+						update_texture({});
+						this->emit(&ev);
+					}
+				});
+				first_render_done = true;
+			}
+			return texture;
+		}
 };
 
 class ws_node_vulkan : public ws_node_cairo {

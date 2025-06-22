@@ -27,6 +27,8 @@ wlroots  = dependency('wlroots-0.18')
 wlroots_headers = wlroots.partial_dependency(includes: true, compile_args: true)
 wlserver = dependency('wayland-server')
 glibmm   = dependency('glibmm-2.4')
+cairo    = dependency('cairo')
+pixman   = dependency('pixman-1')
 
 # additional dependencies for GUI
 gtkmm    = dependency('gtkmm-3.0')

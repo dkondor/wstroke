@@ -10,7 +10,7 @@ Packages are available for:
 
  - [Wayfire](https://github.com/WayfireWM/wayfire), the current development version, i.e. 0.10.0, after commit [544427d](https://github.com/WayfireWM/wayfire/pull/2613) (see below for compiling on older Wayfire versions)
  - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.18](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.18?ref_type=heads).
- - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
+ - Development libraries for GTK, GDK, glib, cairo, pixman, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libcairo2-dev, libpixman-1-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [Vala](https://vala.dev/) compiler (for building, Ubuntu package: `valac`; or use the [no_vala](https://github.com/dkondor/wstroke/tree/no_vala) branch instead)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
@@ -59,6 +59,7 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing strokes.
+ - Drawing strokes with all supported renderer backends (EGL, Vulkan and pixman).
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
  - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly), only supported for some plugins, see [here](https://github.com/WayfireWM/wayfire/issues/1811).
  - Generating keypresses ("Key" action).
@@ -80,4 +81,5 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
  - Individual settings (which button, timeout) for each pointing device
  - Advanced gestures
  - Touchscreen and pen / stylus support
+ - Drawing strokes with the Vulkan renderer (`WLR_RENDERER=vulkan`) is inefficient (suggestions for improvement are welcome).
 

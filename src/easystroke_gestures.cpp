@@ -35,6 +35,7 @@
 #include <sys/inotify.h>
 #include <memory>
 #include <filesystem>
+#include <cstring>
 
 #include <cairo.h>
 #include <pixman.h>
@@ -457,13 +458,8 @@ class ws_node_pixman : public ws_node_cairo {
 				for(int y = damage_acc.y; y < damage_acc.y + damage_acc.height; y++) {
 					size_t base_src = y * stride_src;
 					size_t base_dst = y * stride_dst;
-					for(int x = damage_acc.x; x < damage_acc.x + damage_acc.width; x++) {
-						// note: 4 bytes per pixel
-						dst[base_dst + x * 4]     = src[base_src + x * 4];
-						dst[base_dst + x * 4 + 1] = src[base_src + x * 4 + 1];
-						dst[base_dst + x * 4 + 2] = src[base_src + x * 4 + 2];
-						dst[base_dst + x * 4 + 3] = src[base_src + x * 4 + 3];
-					}
+					// note: each pixel is 4 bytes
+					std::memcpy(dst + base_dst + damage_acc.x * 4UL, src + base_src + damage_acc.x * 4UL, damage_acc.width * 4UL);
 				}
 			}
 			

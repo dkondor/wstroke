@@ -23,7 +23,7 @@ desktop_dir = join_paths(datadir, 'applications')
 # dependencies for loadable plugin
 boost    = dependency('boost', modules: ['serialization'], static: false)
 wayfire  = dependency('wayfire', version: '>=0.10.0')
-wlroots  = dependency('wlroots-0.18')
+wlroots  = dependency('wlroots-0.19')
 wlroots_headers = wlroots.partial_dependency(includes: true, compile_args: true)
 wlserver = dependency('wayland-server')
 glibmm   = dependency('glibmm-2.4')

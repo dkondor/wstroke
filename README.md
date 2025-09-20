@@ -8,7 +8,7 @@ Packages are available for:
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire), the current development version, i.e. 0.10.0, after commit [e7ae118](https://github.com/WayfireWM/wayfire/pull/2717) (see below for compiling on older Wayfire versions)
+ - [Wayfire](https://github.com/WayfireWM/wayfire), version [0.10.0](https://github.com/WayfireWM/wayfire/tree/v0.10.0) or newer (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
  - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.19](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.19?ref_type=heads).
  - Development libraries for GTK, GDK, glib, cairo, pixman, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libcairo2-dev, libpixman-1-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
@@ -24,15 +24,7 @@ ninja -C build
 sudo ninja -C build install
 ```
 
-If you get build errors, your Wayfire version might be too old (or too new). For older Wayfire versions, try the following:
- - For version 0.7.0, use the [wayfire-0.7 branch](https://github.com/dkondor/wstroke/tree/wayfire-0.7) (run `git checkout wayfire-0.7` before building).
- - For older Wayfire versions of the 0.8.0 series (between commits [3cca6c9](https://github.com/WayfireWM/wayfire/commit/3cca6c9fee35ea8671da2b1c3f56ca61045ea693) and [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889)), use [this state](https://github.com/dkondor/wstroke/tree/4f2e8f00e4c734ac6fc3698bc4cfc504fe47a311) (run `git checkout 4f2e8f0` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
- - For moderately old versions of Wayfire (between commits [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889) and
- [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337)), use [this state](https://github.com/dkondor/wstroke/tree/0401b4f608c7d265a10fa2e7f4ce2dafb9caca4b)  (run `git checkout 0401b4f` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
- - For version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0),  [0.9.0](https://github.com/WayfireWM/wayfire/tree/v0.9.0), or the development version up to commit [448ce8b](https://github.com/WayfireWM/wayfire/commit/448ce8b5be341f91b9f3b10ee9d4f3ea8cd57819), use releases of the 2.2 series, the latest available one is [2.2.1](https://github.com/dkondor/wstroke/tree/v2.2.1) (run `git checkout v2.2.1` before building). This version supports building against wlroots versions 0.16-0.18. However, the version of wlroots should be the same that was used for building Wayfire (this should be detected during compilation).
- - For older versions in the 0.10.0 series (between commits [fe33cfa](https://github.com/WayfireWM/wayfire/commit/fe33cfa5b03f11cb9749694929cc33583464bda0) and [544427d](https://github.com/WayfireWM/wayfire/commit/544427d617c9f643af2e2f3dbcbff5513c7d55f1), use releases of the 2.3 series, the latest available one is [2.3.0](https://github.com/dkondor/wstroke/tree/v2.3.0) (run `git checkout v2.3.0` before building). This requires wlroots version 0.18.
- - For slightly old versions of Wayfire in the 0.10.0 series (between commits [544427d](https://github.com/WayfireWM/wayfire/commit/544427d617c9f643af2e2f3dbcbff5513c7d55f1) and [e7ae118](https://github.com/WayfireWM/wayfire/commit/e7ae118b2c21c15370f974e0c8faec37b56ec8ef)), use [this state](https://github.com/dkondor/wstroke/commit/453da331c1e12be7af493128404f994bf8ab1439) (use `git checkout 453da33` before building).
- - For recent versions of Wayfire (0.10.0 or newer, after commit [e7ae118](https://github.com/WayfireWM/wayfire/commit/e7ae118b2c21c15370f974e0c8faec37b56ec8ef)), use this branch (and report issues for build failures).
+If you get build errors, your Wayfire version might be too old (or too new). See the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) for information about building wstroke with older Wayfire versions.
 
 
 ### Running

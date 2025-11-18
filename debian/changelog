@@ -1,3 +1,11 @@
+wstroke (2.4.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * debian/control: depend on wlroots-0.19 and Wayfire 0.10.0
+  * debian/control: drop dependency on nlohmann-json
+
+ -- Daniel Kondor <kondor.dani@gmail.com>  Tue, 18 Nov 2025 20:06:57 +0100
+
 wstroke (2.2.1-1) unstable; urgency=medium
 
   * New upstream release

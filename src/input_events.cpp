@@ -48,11 +48,7 @@ static const struct wlr_keyboard_impl ws_headless_keyboard_impl = {
 void input_headless::init() {
 	auto& core = wf::compositor_core_t::get();
 	/* 1. create headless backend */
-#ifdef WSTROKE_WLR_VERSION_018
 	headless_backend = wlr_headless_backend_create(core.ev_loop);
-#else
-	headless_backend = wlr_headless_backend_create(core.display);
-#endif
 	if(!headless_backend) {
 		LOGE("Cannot create headless wlroots backend!");
 		return;
@@ -138,7 +134,7 @@ void input_headless::pointer_scroll(uint32_t time_msec, double delta, enum WSTRO
 	wlr_pointer_axis_event ev;
 	ev.pointer = input_pointer;
 	ev.time_msec = time_msec;
-	ev.source = WLR_AXIS_SOURCE_CONTINUOUS;
+	ev.source = WL_POINTER_AXIS_SOURCE_CONTINUOUS;
 	ev.orientation = o;
 	ev.delta = delta;
 	ev.delta_discrete = delta * WLR_POINTER_AXIS_DISCRETE_STEP;;

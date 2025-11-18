@@ -31,16 +31,21 @@
 #include <wayfire/plugins/common/input-grab.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
-#include <nlohmann/json.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sys/inotify.h>
 #include <memory>
 #include <filesystem>
+#include <cstring>
+
+#include <cairo.h>
+#include <pixman.h>
+#include <drm_fourcc.h> // for DRM_FORMAT_ARGB8888
 
 #include <linux/input-event-codes.h>
 extern "C"
 {
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/render/pixman.h>
 }
 
 
@@ -73,93 +78,93 @@ void main()
 	gl_FragColor = color;
 })";
 
-class ws_node;
+class ws_node_base;
 
 
-class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node> {
+class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node_base> {
 	public:
 		/* render the current content of the overlay texture */
-		void render(const wf::render_target_t& target, const wf::region_t& region) override;
+		void render(const wf::scene::render_instruction_t& data) override;
 		
-		ws_render_instance(ws_node *self, wf::scene::damage_callback push_damage, wf::output_t *output) :
-			wf::scene::simple_render_instance_t<ws_node>(self, push_damage, output) { }
+		ws_render_instance(ws_node_base *self, wf::scene::damage_callback push_damage, wf::output_t *output) :
+			wf::scene::simple_render_instance_t<ws_node_base>(self, push_damage, output) { }
 };
 
 
-/* node to draw lines on the screen, a simplified version of annotate */
-class ws_node : public wf::scene::node_t {
-	public:
-		wf::output_t* const output;
-		/* current annotation to be rendered -- store it in a framebuffer */
-		wf::framebuffer_t fb;
+/** 
+ * Node to draw lines on the screen, a simplified version of annotate.
+ * This is a base class that does nothing. Derived classes implement
+ * actual rendering based on the render backend in use. */
+class ws_node_base : public wf::scene::node_t {
+	protected:
 		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
 		wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
-		OpenGL::program_t color_program;
 		
-		ws_node(wf::output_t* output_) : node_t(false), output(output_) {
-			/* copied from opengl.cpp */
-			OpenGL::render_begin();
-			color_program.set_simple(OpenGL::compile_program(
-				default_vertex_shader_source, color_rect_fragment_source));
-			OpenGL::render_end();
-		}
-				
-		/* allocate frambuffer for storing the drawings if it
-		 * has not been allocated yet, according to the current
-		 * output size */
-		bool ensure_fb() {
-			bool ret = true;
-			if(fb.tex == (GLuint)-1 || fb.fb == (GLuint)-1) {
-				auto dim = output->get_screen_size();
-				OpenGL::render_begin();
-				ret = fb.allocate(dim.width, dim.height);
-				if(ret) {
-					fb.bind(); // bind buffer to clear it
-					OpenGL::clear({0, 0, 0, 0});
-				}
-				OpenGL::render_end();
-			}
-			return ret;
-		}
-		
+		/* Helper to apply damage after updating the current stroke */
 		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
 			damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
 			damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
 			damageRect.width += std::ceil(stroke_width + 1);
 			damageRect.height += std::ceil(stroke_width + 1);
 		}
-
-		/* draw a line into the overlay texture between the given points;
-		 * allocates the overlay texture if necessary and activates rendering */
-		void draw_line(int x1, int y1, int x2, int y2) {
-			if(stroke_width == 0) return;
-			if(!ensure_fb()) return;
-			
-			wf::dimensions_t dim = output->get_screen_size();
-			auto ortho = glm::ortho(0.0f, (float)dim.width, (float)dim.height, 0.0f);
-			
-			OpenGL::render_begin(fb);
-			GL_CALL(glLineWidth((float)stroke_width));
-			GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
-			render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
-			OpenGL::render_end();
-			
-			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
-			pad_damage_rect(d, stroke_width);
-			wf::scene::node_damage_signal ev;
-			ev.region = d; /* note: implicit conversion to wf::region_t */
-			this->emit(&ev);
+	
+	public:
+		ws_node_base(wf::output_t* output_) : node_t(false), output(output_) { }
+		
+		/* output to which this node renders -- needs to be public as it is
+		 * used by ws_render_instance::render() */
+		wf::output_t* const output;
+		
+		/** Main interface used by our plugin: */
+		/* draw a line into our overlay between the given points */
+		virtual void draw_line(int x1, int y1, int x2, int y2) { }
+		
+		/* clear everything rendered by this plugin and deallocate any textrue or framebuffer used */
+		virtual void clear_lines() { }
+		
+		
+		/** Override functions for node_t -- these do nothing in the base case */
+		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
+			wf::scene::damage_callback push_damage, wf::output_t *shown_on) override
+		{ }
+		
+		wf::geometry_t get_bounding_box() override {
+			return {0, 0, 0, 0};
 		}
 		
-		/* clear everything rendered by this plugin and deallocate the framebuffer */
-		void clear_lines() {
-			fb.release();
-			output->render->damage_whole();
+		/* Function used by ws_render_instance::render() to get the actual
+		 * texture to show (if any). */
+		virtual wf::texture_t get_texture() {
+			return {};
+		}
+};
+
+/* EGL version */
+class ws_node_egl : public ws_node_base {
+	private:
+		/* current annotation to be rendered -- store it in an auxiliary buffer */
+		wf::auxilliary_buffer_t fb;
+		OpenGL::program_t color_program;
+		
+		/* allocate frambuffer for storing the drawings if it
+		 * has not been allocated yet, according to the current
+		 * output size */
+		bool ensure_fb() {
+			auto dim = output->get_screen_size();
+			auto ret = fb.allocate(dim); //!! TODO: is it guaranteed that this will allocate an EGL buffer?
+			
+			if (ret == wf::buffer_reallocation_result_t::REALLOCATED) {
+				wf::gles::run_in_context([&] {
+					wf::gles::bind_render_buffer(fb.get_renderbuffer());
+					OpenGL::clear({0, 0, 0, 0});
+				});
+			}
+			
+			return (ret != wf::buffer_reallocation_result_t::FAILED);
 		}
 		
 		/* render a sequence of vertices, using the given color 
-		 * should only be called between OpenGL::render_begin() and
-		 * OpenGL::render_end() */
+		 * should only be called in wf::gles::run_in_context() */
 		void render_vertices(GLfloat* vertexData, GLsizei nvertices,
 			wf::color_t color, GLenum mode, glm::mat4 matrix)
 		{
@@ -176,30 +181,370 @@ class ws_node : public wf::scene::node_t {
 			color_program.deactivate();
 		}
 		
+	public:
+		ws_node_egl(wf::output_t* output_) : ws_node_base(output_) {
+			wf::gles::run_in_context([&] {
+				color_program.set_simple(OpenGL::compile_program(
+					default_vertex_shader_source, color_rect_fragment_source));
+			});
+		}
+		
+		void draw_line(int x1, int y1, int x2, int y2) override {
+			if(stroke_width == 0) return;
+			if(!ensure_fb()) return;
+			
+			wf::dimensions_t dim = output->get_screen_size();
+			auto ortho = glm::ortho(0.0f, (float)dim.width, 0.0f, (float)dim.height);
+			
+			wf::gles::run_in_context([&] {
+				wf::gles::bind_render_buffer(fb.get_renderbuffer());
+				GL_CALL(glLineWidth((float)stroke_width));
+				GLfloat vertexData[4] = { (float)x1, (float)y1, (float)x2, (float)y2 };
+				render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
+			});
+			
+			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
+			pad_damage_rect(d, stroke_width);
+			
+			wf::scene::node_damage_signal ev;
+			ev.region = d; /* note: implicit conversion to wf::region_t */
+			this->emit(&ev);
+		}
+		
+		void clear_lines() override {
+			fb.free();
+			output->render->damage_whole();
+		}
+		
 		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
 				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
-			if(shown_on == output) instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+			if(shown_on == output)
+				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
 		}
 		
 		wf::geometry_t get_bounding_box() override {
 			wf::dimensions_t dim = output->get_screen_size();
 			return {0, 0, dim.width, dim.height};
 		}
+		
+		wf::texture_t get_texture() override {
+			if(!fb.get_buffer()) return {};
+			return {fb.get_texture()};
+		}
 };
 
 
-void ws_render_instance::render(const wf::render_target_t& target, const wf::region_t& region) {
-	if(this->self->fb.tex == (GLuint)-1) return;
-	auto geometry = this->self->output->get_relative_geometry();
+/* Base class for pixman and vulkan cases, strokes are drawn with Cairo and
+ * converted to a wlr_texture to use later. */
+class ws_node_cairo : public ws_node_base {
+	protected:
+		cairo_t *ctx = nullptr;
+		cairo_surface_t *surface = nullptr;
+		wf::texture_t texture;
+		// account for whether we have rendered at least once (needed by the pixman renderer)
+		bool first_render_done = false;
 	
-	OpenGL::render_begin(target);
-	for (auto& box : region) {
-		target.logic_scissor(wlr_box_from_pixman_box(box));
-		OpenGL::render_texture(this->self->fb.tex, target, geometry);
-	}
-	OpenGL::render_end();
+	private:
+		bool ensure_surface() {
+			auto dim = output->get_screen_size();
+			
+			if(surface) {
+				if(cairo_image_surface_get_height(surface) != dim.height ||
+						cairo_image_surface_get_width(surface) != dim.width) {
+					free_texture();
+					free_cairo();
+				}
+			}
+			
+			if(!surface) {
+				surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, dim.width, dim.height);
+				if(!surface) return false;
+				ctx = cairo_create(surface);
+				clear_overlay();
+				cairo_surface_flush(surface);
+				// note: in this case, we should have texture.texture == nullptr
+			}
+			
+			return true;
+		}
+		
+		void clear_overlay() {
+			cairo_set_source_rgba(ctx, 0, 0, 0, 0);
+			cairo_set_operator(ctx, CAIRO_OPERATOR_SOURCE);
+			cairo_paint(ctx);
+		}
+		
+		void free_texture() {
+			if(texture.texture) {
+				wlr_texture_destroy(texture.texture);
+				texture.texture = nullptr;
+			}
+			first_render_done = false;
+		}
+		
+		void free_cairo() {
+			if(ctx) {
+				cairo_destroy(ctx);
+				ctx = nullptr;
+			}
+			if(surface) {
+				cairo_surface_destroy(surface);
+				surface = nullptr;
+			}
+		}
+	
+	protected:
+		/* create our wlr_texture from our cairo surface */
+		bool create_texture() {
+			free_texture();
+			texture.texture = wlr_texture_from_pixels(wf::get_core().renderer,
+				DRM_FORMAT_ARGB8888, cairo_image_surface_get_stride(surface),
+				cairo_image_surface_get_width(surface),
+				cairo_image_surface_get_height(surface),
+				cairo_image_surface_get_data(surface));
+			return (texture.texture != nullptr);
+		}
+		
+		virtual bool update_texture(const wf::geometry_t& d) = 0;
+	
+	public:
+		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_) {
+			/* nothing else to do, we will allocate a buffer when first drawing */			
+		}
+		
+		~ws_node_cairo() {
+			/* Destroy our texture first, as it might refer to the same memory
+			 * as our cairo surface. */
+			free_texture();
+			free_cairo();
+		}
+		
+		void draw_line(int x1, int y1, int x2, int y2) override {
+			if(stroke_width == 0) return;
+			if(!ensure_surface()) return;
+			
+			wf::color_t color = stroke_color;
+			cairo_set_line_width(ctx, stroke_width);
+			cairo_set_source_rgba(ctx, color.r, color.g, color.b, color.a);
+			cairo_move_to(ctx, x1, y1);
+			cairo_line_to(ctx, x2, y2);
+			cairo_stroke(ctx);
+			cairo_surface_flush(surface);
+			
+			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
+			pad_damage_rect(d, stroke_width);
+			
+			bool res;
+			if(!texture.texture) res = create_texture();
+			else res = update_texture(d);
+			
+			if(res) {
+				wf::scene::node_damage_signal ev;
+				ev.region = d; /* note: implicit conversion to wf::region_t */
+				this->emit(&ev);
+			}
+		}
+		
+		void clear_lines() override {
+			free_texture();
+			if(ctx) clear_overlay();
+			output->render->damage_whole();
+		}
+		
+		void gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,
+				wf::scene::damage_callback push_damage, wf::output_t *shown_on) override {
+			if(shown_on == output)
+				instances.push_back(std::make_unique<ws_render_instance>(this, push_damage, shown_on));
+		}
+		
+		wf::geometry_t get_bounding_box() override {
+			wf::dimensions_t dim = output->get_screen_size();
+			return {0, 0, dim.width, dim.height};
+		}
+		
+		wf::texture_t get_texture() override {
+			return texture;
+		}
+};
+
+class ws_node_pixman : public ws_node_cairo {
+	private:
+		wf::geometry_t damage_acc{};
+		wf::wl_idle_call idle_damage;
+		
+		void extend_damage(const wf::geometry_t& d) {
+			if(damage_acc.width == 0 && damage_acc.height == 0) {
+				damage_acc = d;
+				return;
+			}
+			if(d.width == 0 && d.height == 0) return;
+			int x1 = std::min(d.x, damage_acc.x);
+			int y1 = std::min(d.y, damage_acc.y);
+			int x2 = std::max(d.x + d.width,  damage_acc.x + damage_acc.width);
+			int y2 = std::max(d.y + d.height, damage_acc.y + damage_acc.height);
+			damage_acc = {x1, y1, x2 - x1, y2 - y1};
+		}
+		
+	protected:
+		bool update_texture(const wf::geometry_t& d) override {
+			/**
+			 * wlroots' pixman renderer works with the following quirks when
+			 * using a texture created with wlr_texture_from_pixels():
+			 *  1. First a wlr_readonly_data_buffer is created which just encapsulates
+			 *      whatever data it gets (so it is just a wrapper around our cairo
+			 *      surface at this point)
+			 *  2. Then, a wlr_pixman_texture is created from this buffer. This creates
+			 *      a pixman_image_t that also wraps our cairo surface.
+			 *  3. After this, the buffer is "dropped". Instead of actually freeing
+			 *      it up, it is kept around (saved in the texture), but its data
+			 *      pointer is replaced by a newly created copy of the original data.
+			 *  4. Thus at this point, we have two copies of our image data:
+			 *     -- texture->image, which just wraps our cairo surface
+			 *     -- texture->buffer, which has a copy
+			 *  5. When we try to render this texture, the pixman renderer compares
+			 *      the above two data pointers, and decides that the pixman image
+			 *      is "out of date". This is motivated by the fact that if working
+			 *      with a buffer supplied by a Wayland client, its data pointer
+			 *      can indeed change.
+			 *  6. The pixman renderer deals with this by destroying the original
+			 *      pixman image and creating a new one which now wraps the data
+			 *      pointer in the wlr_buffer (i.e. which is a copy of the original
+			 *      image we submitted when creating the texture).
+			 * This means that any changes to the image (i.e. our cairo surface)
+			 * between steps #4 and #5 (between wlr_texture_from_pixels() and the
+			 * first time we actually render it) will not be visible.
+			 * 
+			 * To account for the above, we need to track any such changes and redo
+			 * the copy after we have done at least one render pass.
+			 * 
+			 * Note: this means that we likely should not rely on being able to
+			 * change the content of a wlr_texture after it has been created, but
+			 * we do not want to recreate it every time when the stroke is updated.
+			 */
+			
+			extend_damage(d);
+			
+			/* If we have not rendered first, we just make note of the newly damaged area (as above). */
+			if(!first_render_done) return true;
+			
+			/* Copy the damaged area to our texture if needed, which is a pixman image */
+			pixman_image_t *img = wlr_pixman_texture_get_image(texture.texture);
+			if(!img) {
+				LOGE("Cannot access pixman texture data!");
+				return false;
+			}
+			
+			if (pixman_image_get_format(img) != PIXMAN_a8r8g8b8) {
+				// should not happen, img should be a copy of our data
+				LOGE("Pixman texture data in incorrect format!");
+				return false;
+			}
+			
+			uint8_t *dst = (uint8_t*)pixman_image_get_data(img);
+			int stride_dst = pixman_image_get_stride(img);
+			uint8_t *src = cairo_image_surface_get_data(surface);
+			int stride_src = cairo_image_surface_get_stride(surface);
+			
+			if(dst != src) {
+				/** Based on the above, we expect this case. */
+				
+				/* copy our data
+				 * Note: wf::geometry_t is a wlr_box which has the following definition:
+					struct wlr_box {
+						int x, y;
+						int width, height;
+					};
+				 */
+				for(int y = damage_acc.y; y < damage_acc.y + damage_acc.height; y++) {
+					size_t base_src = y * stride_src;
+					size_t base_dst = y * stride_dst;
+					// note: each pixel is 4 bytes
+					std::memcpy(dst + base_dst + damage_acc.x * 4UL, src + base_src + damage_acc.x * 4UL, damage_acc.width * 4UL);
+				}
+			}
+			
+			/* reset previous damage */
+			damage_acc = {0, 0, 0, 0};
+			
+			return true;
+		}
+	
+	public:
+		ws_node_pixman(wf::output_t* output_) : ws_node_cairo(output_) { }
+		
+		wf::texture_t get_texture() override {
+			/* This is called from the render() function, so we set here
+			 * that the first render pass was done, but also we schedule
+			 * an update to the now updated texture and re-submit the
+			 * accummulated damage. */
+			if(!first_render_done && texture.texture) {
+				idle_damage.run_once([this] () {
+					if(texture.texture) {
+						wf::scene::node_damage_signal ev;
+						ev.region = damage_acc;
+						update_texture({});
+						this->emit(&ev);
+					}
+				});
+				first_render_done = true;
+			}
+			return texture;
+		}
+};
+
+class ws_node_vulkan : public ws_node_cairo {
+	private:
+		bool need_update = false;
+	
+	protected:
+		bool update_texture(const wf::geometry_t& d) override {
+			/* Just mark that we need to update the overlay texture. It
+			 * will be recreated (re-uploaded to the GPU) at the next render.
+			 * This way, we have maximum one texture upload per render cycle. */
+			need_update = true;
+			return true;
+		}
+	
+	public:
+		ws_node_vulkan(wf::output_t* output_) : ws_node_cairo(output_) { }
+		
+		wf::texture_t get_texture() override {
+			/* I don't know how to update only part of a Vulkan-based wlr_texture,
+			 * so we just recreate the whole thing. This means re-uploading the
+			 * full surface to the GPU again unfortunately.
+			 * Note: create_texture() will free up the current texture. */
+			if(need_update) {
+				create_texture();
+				need_update = false;
+			}
+			return texture;
+		}
+};
+
+
+
+void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
+	auto texture = this->self->get_texture();
+	if(!texture.texture) return;
+	auto geometry = this->self->output->get_relative_geometry();
+	data.pass->add_texture(texture, data.target, geometry, data.damage);
 }
 
+
+/* Helper to create the correct type of render node based on the render
+ * backend in use. */
+static std::shared_ptr<ws_node_base> get_ws_node(wf::output_t* output_) {
+	if(wf::get_core().is_gles2())
+		return std::shared_ptr<ws_node_base>(new ws_node_egl(output_));
+	
+	if(wf::get_core().is_vulkan())
+		return std::shared_ptr<ws_node_base>(new ws_node_vulkan(output_));
+	
+	if(wlr_renderer_is_pixman(wf::get_core().renderer))
+		return std::shared_ptr<ws_node_base>(new ws_node_pixman(output_));
+	
+	return std::shared_ptr<ws_node_base>(new ws_node_base(output_));
+}
 
 
 class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {
@@ -274,7 +619,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		/* scenegraph node for drawing an overlay -- it is active
 		 * (i.e. added to the scenegraph) iff. is_gesture == true */
-		std::shared_ptr<ws_node> overlay_node;
+		std::shared_ptr<ws_node_base> overlay_node;
 		
 	public:
 		wstroke() {
@@ -301,7 +646,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				input.init();
 			});
 			
-			overlay_node = std::make_shared<ws_node>(output);
+			overlay_node = get_ws_node(output);
 			
 			output->add_button(initiate, &stroke_initiate);
 			wf::get_core().connect(&on_raw_pointer_button);
@@ -334,7 +679,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* pointer tracking interface */
 		void handle_pointer_button(const wlr_pointer_button_event& event) override {
 			wf::buttonbinding_t tmp = initiate;
-			if(event.button == tmp.get_button() && event.state == WLR_BUTTON_RELEASED) {
+			if(event.button == tmp.get_button() && event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
 				if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
 				else end_stroke();
 			}
@@ -410,9 +755,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
 					input.keyboard_mods(mod, 0, 0);
 				}
-				input.pointer_button(t, btn, WLR_BUTTON_PRESSED);
+				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_PRESSED);
 				t++;
-				input.pointer_button(t, btn, WLR_BUTTON_RELEASED);
+				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_RELEASED);
 				if(mod) {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					input.keyboard_mods(0, 0, 0);
@@ -480,9 +825,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 									 * commence from the current pointer location */
 									ignore_next_own_btn = true;
 									uint32_t t = wf::get_current_time();
-									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_PRESSED);
+									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
 									t++;
-									input.pointer_button(t, BTN_LEFT, WLR_BUTTON_RELEASED);
+									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
 									wf::get_core().default_wm->move_request(toplevel);
 								}
 							}
@@ -493,16 +838,28 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					if(toplevel) wf::get_core().default_wm->resize_request(toplevel, get_resize_edges());
 					break;
 				case View::Type::FULLSCREEN:
-					if(toplevel) call_plugin("wm-actions/set-fullscreen", true, { {"state", !toplevel->toplevel()->current().fullscreen} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->toplevel()->current().fullscreen;
+						call_plugin("wm-actions/set-fullscreen", true, std::move(tmp));
+					}
 					break;
 				case View::Type::SEND_TO_BACK:
 					call_plugin("wm-actions/send-to-back", true);
 					break;
 				case View::Type::ALWAYS_ON_TOP:
-					call_plugin("wm-actions/set-always-on-top", true, { {"state", !target_view->has_data("wm-actions-above")} });
+					{
+						wf::json_t tmp;
+						tmp["state"] = !target_view->has_data("wm-actions-above");
+						call_plugin("wm-actions/set-always-on-top", true, std::move(tmp));
+					}
 					break;
 				case View::Type::STICKY:
-					if(toplevel) call_plugin("wm-actions/set-sticky", true, { {"state", !toplevel->sticky} });
+					if(toplevel) {
+						wf::json_t tmp;
+						tmp["state"] = !toplevel->sticky;
+						call_plugin("wm-actions/set-sticky", true, std::move(tmp));
+					}
 					break;
 				default:
 					break;
@@ -597,7 +954,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* call a plugin activator -- do this from the idle_call, so 
 		 * that our grab interface does not get in the way; also take
 		 * care of refocusing the original view if needed */
-		void call_plugin(const std::string& plugin_activator, bool include_view = false, nlohmann::json data = nlohmann::json()) {
+		void call_plugin(const std::string& plugin_activator, bool include_view = false, wf::json_t&& data = wf::json_t()) {
 			data["output_id"] = output->get_id();
 			if(include_view) data["view_id"] = target_view->get_id();
 			set_idle_action([this, plugin_activator, data] () {
@@ -754,8 +1111,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					output->rem_binding(&stroke_initiate);
-					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_PRESSED);
-					input.pointer_button(t, tmp.get_button(), WLR_BUTTON_RELEASED);
+					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
+					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
 					output->add_button(initiate, &stroke_initiate);
 					view_unmapped.disconnect();
 				});
@@ -831,7 +1188,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>> on_raw_pointer_button =
 				[=] (wf::input_event_signal<wlr_pointer_button_event> *ev) {
-			if(ev->event->state == WLR_BUTTON_PRESSED) {
+			if(ev->event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
 				if(touchpad_active != Touchpad::Type::NONE) {
 					next_release_touchpad = true;
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
@@ -839,7 +1196,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 			}
-			if(ev->event->state == WLR_BUTTON_RELEASED) {
+			if(ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 				if(next_release_touchpad) {
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					next_release_touchpad = false;

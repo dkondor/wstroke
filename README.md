@@ -8,11 +8,10 @@ Packages are available for:
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire) version [0.8.0](https://github.com/WayfireWM/wayfire/tree/v0.8.0),  [0.9.0](https://github.com/WayfireWM/wayfire/tree/v0.9.0) or the current development version (see below for compiling for older Wayfire versions)
- - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.16](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.16?ref_type=heads), [0.17](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.17?ref_type=heads) or [0.18](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.18?ref_type=heads).
- - Development libraries for GTK, GDK, glib, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
+ - [Wayfire](https://github.com/WayfireWM/wayfire), version [0.10.0](https://github.com/WayfireWM/wayfire/tree/v0.10.0) or newer (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
+ - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.19](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.19?ref_type=heads).
+ - Development libraries for GTK, GDK, glib, cairo, pixman, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libcairo2-dev, libpixman-1-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
- - [nlohmann_json](https://github.com/nlohmann/json/), recommended to use the same version that Wayfire uses (currently version 3.9.1)
  - [Vala](https://vala.dev/) compiler (for building, Ubuntu package: `valac`; or use the [no_vala](https://github.com/dkondor/wstroke/tree/no_vala) branch instead)
  - Optional, but highly recommended: [WCM](https://github.com/WayfireWM/wcm) for basic configuration
  - Optionally [libinput](https://www.freedesktop.org/wiki/Software/libinput/) version [1.17](https://lists.freedesktop.org/archives/wayland-devel/2021-February/041733.html) or higher for improved touchpad support (to allow tap-and-drag for the right and middle buttons, required for drawing gestures without physical buttons)
@@ -25,14 +24,8 @@ ninja -C build
 sudo ninja -C build install
 ```
 
-If you get build errors, your Wayfire version might be too old (or too new). For older Wayfire versions, try the following:
- - For version 0.7.0, use the [wayfire-0.7 branch](https://github.com/dkondor/wstroke/tree/wayfire-0.7) (run `git checkout wayfire-0.7` before building).
- - For older Wayfire versions of the 0.8.0 series (between commits [3cca6c9](https://github.com/WayfireWM/wayfire/commit/3cca6c9fee35ea8671da2b1c3f56ca61045ea693) and [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889)), use [this state](https://github.com/dkondor/wstroke/tree/4f2e8f00e4c734ac6fc3698bc4cfc504fe47a311) (run `git checkout 4f2e8f0` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
- - For moderately old versions of Wayfire (between commits [d1f33e5](https://github.com/WayfireWM/wayfire/commit/d1f33e58326175f6437d0345ac78b0bb9f03b889) and
- [3ac0284](https://github.com/WayfireWM/wayfire/commit/3ac028406cc3697dd40c128721fb6e681b00c337)), use [this state](https://github.com/dkondor/wstroke/tree/0401b4f608c7d265a10fa2e7f4ce2dafb9caca4b)  (run `git checkout 0401b4f` before building). If using multiple monitors, you can separately apply the fix to [issue #5](https://github.com/dkondor/wstroke/issues/5): `git cherry-pick 1c02905a4e`
- - For recent versions of Wayfire (0.8.0 or newer), use this branch (and report issues for build failures).
+If you get build errors, your Wayfire version might be too old (or too new). See the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) for information about building wstroke with older Wayfire versions.
 
-The current version supports building against wlroots versions 0.16-0.18. However, the version of wlroots should be the same that was used for building Wayfire (this should be detected during compilation). If you would like to (or need to) use wlroots 0.18, you need to use the [track-wlroots](https://github.com/WayfireWM/wayfire/tree/track-wlroots) branch of Wayfire.
 
 ### Running
 
@@ -49,7 +42,7 @@ Gestures can be configured by the standalone program `wstroke-config`. Recommend
 Gestures are stored under `wstroke/actions-wstroke-2` in the directory given by the `XDG_CONFIG_HOME` environment variable (`~/.config` by default). It is recommended not to edit this file manually, but it can be copied between different computers, or backed up and restored manually.
 
 #### Focus settings ####
-For a better experience, it is recommended to diable the "click-to-focus" feature in Wayfire for the mouse button used for gestures. This will allow wstroke to manage focus when using this button and set the target of the gesture as requested by the user.
+For a better experience, it is recommended to disable the "click-to-focus" feature in Wayfire for the mouse button used for gestures. This will allow wstroke to manage focus when using this button and set the target of the gesture as requested by the user.
 
 To do this, under the "Core" tab of WCM, change the option "Mouse button to focus views" to *not* include the button used for gestures. E.g. if the right button is used, the setting here should not contain `BTN_RIGHT`, so it might look like `BTN_LEFT | BTN_MIDDLE` (note: it is best to set this by clicking on the edit button on the right of the setting and manually editing the text that corresponds to this setting). Don't be alarmed by the warning that appears ("Attempting to bind `BTN_LEFT | BTN_MIDDLE` without modifier"); this is exactly the intended behavior in this case.
 
@@ -59,6 +52,7 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
 
  - Importing saved strokes from "actions" files created with Easystroke (just run `wstroke-config`).
  - Drawing and recognizing strokes.
+ - Drawing strokes with all supported renderer backends (EGL, Vulkan and pixman).
  - Actions on the active view: close, minimize, (un)maximize, move, resize (select "WM Action" and the appropriate action).
  - Actions to activate another Wayfire plugin (typical desktop interactions are under "Global Action"; "Custom Plugin" can be used with giving the plugin activator name directly), only supported for some plugins, see [here](https://github.com/WayfireWM/wayfire/issues/1811).
  - Generating keypresses ("Key" action).
@@ -76,8 +70,9 @@ The same can be achieved by editing the option `focus_buttons` in the `[core]` s
 ### What does not work
 
  - SendText action (removed from settings, will be converted to Global)
- - Ignore in combination with keyboard keypresses.
+ - Ignore action in combination with keyboard keypresses.
  - Individual settings (which button, timeout) for each pointing device
  - Advanced gestures
  - Touchscreen and pen / stylus support
+ - Drawing strokes with the Vulkan renderer (`WLR_RENDERER=vulkan`) is inefficient (suggestions for improvement are welcome).
 

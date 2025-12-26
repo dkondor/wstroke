@@ -549,7 +549,6 @@ static std::shared_ptr<ws_node_base> get_ws_node(wf::output_t* output_) {
 
 class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {
 	protected:
-		wf::button_callback stroke_initiate;
 		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"wstroke/initiate"};
 		wf::option_wrapper_t<bool> target_mouse{"wstroke/target_view_mouse"};
 		wf::option_wrapper_t<std::string> focus_mode{"wstroke/focus_mode"};
@@ -559,6 +558,28 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		wf::option_wrapper_t<double> touchpad_scroll_sensitivity{"wstroke/touchpad_scroll_sensitivity"};
 		wf::option_wrapper_t<int> touchpad_pinch_sensitivity{"wstroke/touchpad_pinch_sensitivity"};
 		
+		/** Grab interface to track input while a stroke is being drawn. This means
+		 * that input is not passed to underlying surfaces (they are notified of
+		 * losing mouse focus) and also that popups are closed automatically.
+		 * We only activate this after a stroke has been detected (i.e. the mouse moved
+		 * a sufficiently large amount (16 pixels currently) -> is_gesture is set to true).
+		 * This is to avoid unwanted side-effects (closing popups, cursor focus change,
+		 * etc.) for normal mouse clicks that we want to pass to the underlying surface.
+		 * This also means that the cursor focus surface will be notified of mouse
+		 * movements until we detect a gesture, but this is not really a problem.
+		 * 
+		 * Handling of input happens in two ways:
+		 *  - Detecting the original button press is done with
+		 *    on_raw_pointer_button() (if active == false). We do not grab
+		 *    input at this point.
+		 *  - First phase: active == true, is_gesture == false:
+		 *    We use on_raw_pointer_button() and on_raw_pointer_motion()
+		 *    and call handle_pointer_button() handle_input_move() from these.
+		 *  - Second phase: active == true, is_gesture == true:
+		 *    We have activated input_grab and receive input events in
+		 *    handle_pointer_button() and handle_pointer_motion() directly;
+		 *    in this case, we ignore events in the raw_pointer_* functions.
+		 */
 		std::unique_ptr<wf::input_grab_t> input_grab;
 		wf::plugin_activation_data_t grab_interface{
 			.name = "wstroke",
@@ -586,6 +607,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		bool active = false;
 		bool is_gesture = false; /* whether currently processing a gesture */
+		bool own_button = false; /* whether we are currently generating a button press */
 		/* current modifier keys held by the ignore action */
 		uint32_t ignore_active = 0;
 		
@@ -623,10 +645,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 	public:
 		wstroke() {
-			stroke_initiate = [=](const wf::buttonbinding_t& btn) {
-				auto p = output->get_cursor_position();
-				return start_stroke(p.x, p.y);
-			};
 			char* xdg_config = getenv("XDG_CONFIG_HOME");
 			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
 			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
@@ -648,7 +666,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			
 			overlay_node = get_ws_node(output);
 			
-			output->add_button(initiate, &stroke_initiate);
 			wf::get_core().connect(&on_raw_pointer_button);
 			wf::get_core().connect(&on_raw_pointer_motion);
 			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
@@ -662,7 +679,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			on_raw_pointer_button.disconnect();
 			on_raw_pointer_motion.disconnect();
 			// ignore_key_cb.disconnect();
-			output->rem_binding(&stroke_initiate);
 			input.fini();
 			overlay_node = nullptr;
 			actions.reset();
@@ -1013,7 +1029,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				view_unmapped.disconnect();
 				return false;
 			}
-			input_grab->grab_input(wf::scene::layer::OVERLAY);
 			
 			active = true;
 			ps.push_back(Stroke::Point{(double)x, (double)y});
@@ -1032,6 +1047,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				float dist = hypot(t.x - ps.front().x, t.y - ps.front().y);
 				if(dist > 16.0f) {
 					is_gesture = true;
+					input_grab->grab_input(wf::scene::layer::OVERLAY);
 					start_drawing();
 					if(target_mouse && target_view && target_view != initial_active_view) {
 						const std::string& mode = focus_mode;
@@ -1066,7 +1082,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(!active) return; /* in case the timeout was not disconnected */
 			timeout.disconnect();
 			ptr_moved = false;
-			input_grab->ungrab_input();
+			if (is_gesture) input_grab->ungrab_input();
 			output->deactivate_plugin(&grab_interface);
 			if(is_gesture) {
 				overlay_node->clear_lines();
@@ -1110,10 +1126,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					check_focus_mouse_view();
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
-					output->rem_binding(&stroke_initiate);
+					own_button = true; // will be reset to false in on_raw_pointer_button ()
 					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
 					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
-					output->add_button(initiate, &stroke_initiate);
 					view_unmapped.disconnect();
 				});
 			}
@@ -1195,6 +1210,13 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				}
 				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
+				else if (!active && !own_button) {
+					wf::buttonbinding_t tmp = initiate;
+					if(ev->event->button == tmp.get_button()) {
+						auto p = output->get_cursor_position();
+						if (start_stroke(p.x, p.y)) ev->mode = wf::input_event_processing_mode_t::IGNORE;
+					}
+				}
 			}
 			if(ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 				if(next_release_touchpad) {
@@ -1205,14 +1227,27 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					ignore_next_own_btn = false;
 				}
+				else if (active) {
+					if (!is_gesture) handle_pointer_button (*ev->event);
+				}
+				else if (own_button) {
+					wf::buttonbinding_t tmp = initiate;
+					if(ev->event->button == tmp.get_button()) own_button = false;
+				}
 				end_touchpad();
 				end_ignore();
 			}
 		};
 		
 		wf::signal::connection_t<wf::input_event_signal<wlr_pointer_motion_event>> on_raw_pointer_motion =
-			[=] (wf::input_event_signal<wlr_pointer_motion_event> *ev) {
-			switch(touchpad_active) {
+				[=] (wf::input_event_signal<wlr_pointer_motion_event> *ev) {
+			if (active && !is_gesture) {
+				// we are in the first phase of event processing, input_grab is not active yet
+				auto p = output->get_cursor_position(); //!! TODO: use event coordinates directly !!
+				handle_input_move (p.x, p.y);
+				return;
+			}
+			else switch(touchpad_active) {
 				case Touchpad::Type::NONE:
 					return;
 				case Touchpad::Type::SCROLL:

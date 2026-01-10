@@ -574,11 +574,15 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		 *    input at this point.
 		 *  - First phase: active == true, is_gesture == false:
 		 *    We use on_raw_pointer_button() and on_raw_pointer_motion()
-		 *    and call handle_pointer_button() handle_input_move() from these.
+		 *    and call handle_input_move() from these.
 		 *  - Second phase: active == true, is_gesture == true:
-		 *    We have activated input_grab and receive input events in
-		 *    handle_pointer_button() and handle_pointer_motion() directly;
-		 *    in this case, we ignore events in the raw_pointer_* functions.
+		 *    We have activated input_grab and receive input move events in
+		 *    handle_pointer_motion() directly; in this case, we ignore
+		 *    events in the on_raw_pointer_motion() function but still
+		 *    handle button events in the on_raw_pointer_button() function.
+		 *    This is necessary as using handle_pointer_button() will result
+		 *    in confusion if it is used with a release without a corresponding
+		 *    button press.
 		 */
 		std::unique_ptr<wf::input_grab_t> input_grab;
 		wf::plugin_activation_data_t grab_interface{
@@ -693,14 +697,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		}
 		
 		/* pointer tracking interface */
-		void handle_pointer_button(const wlr_pointer_button_event& event) override {
-			wf::buttonbinding_t tmp = initiate;
-			if(event.button == tmp.get_button() && event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
-				if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
-				else end_stroke();
-			}
-		}
-		
 		void handle_pointer_motion(wf::pointf_t pointer_position, uint32_t time_ms) override {
 			ptr_moved = true;
 			auto geom = output->get_layout_geometry();
@@ -1227,12 +1223,18 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					ignore_next_own_btn = false;
 				}
-				else if (active) {
-					if (!is_gesture) handle_pointer_button (*ev->event);
-				}
-				else if (own_button) {
+				else {
 					wf::buttonbinding_t tmp = initiate;
-					if(ev->event->button == tmp.get_button()) own_button = false;
+					if(ev->event->button == tmp.get_button()) {
+						if (active) {
+							// end of a stroke -- note: we cannot rely on handle_pointer_button() from the grab interface,
+							// since we want to set event handling to IGNORE
+							if(start_timeout > 0 && !ptr_moved) timeout.set_timeout(start_timeout, [this]() { end_stroke(); });
+							else end_stroke();
+							ev->mode = wf::input_event_processing_mode_t::IGNORE;
+						}
+						else if (own_button) own_button = false;
+					}
 				}
 				end_touchpad();
 				end_ignore();

@@ -1206,7 +1206,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				}
 				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
-				else if (!active && !own_button) {
+				else if (!active && !own_button && wf::get_core().seat->get_active_output() == output) {
 					wf::buttonbinding_t tmp = initiate;
 					if(ev->event->button == tmp.get_button()) {
 						auto p = output->get_cursor_position();

@@ -135,8 +135,8 @@ class ws_node_base : public wf::scene::node_t {
 		
 		/* Function used by ws_render_instance::render() to get the actual
 		 * texture to show (if any). */
-		virtual wf::texture_t get_texture() {
-			return {};
+		virtual std::shared_ptr<wf::texture_t> get_texture() {
+			return nullptr;
 		}
 };
 
@@ -228,9 +228,9 @@ class ws_node_egl : public ws_node_base {
 			return {0, 0, dim.width, dim.height};
 		}
 		
-		wf::texture_t get_texture() override {
-			if(!fb.get_buffer()) return {};
-			return {fb.get_texture()};
+		std::shared_ptr<wf::texture_t> get_texture() override {
+			if(!fb.get_buffer()) return nullptr;
+			return wf::texture_t::from_aux(fb);
 		}
 };
 
@@ -241,7 +241,7 @@ class ws_node_cairo : public ws_node_base {
 	protected:
 		cairo_t *ctx = nullptr;
 		cairo_surface_t *surface = nullptr;
-		wf::texture_t texture;
+		std::shared_ptr<wf::texture_t> texture;
 		// account for whether we have rendered at least once (needed by the pixman renderer)
 		bool first_render_done = false;
 	
@@ -276,10 +276,7 @@ class ws_node_cairo : public ws_node_base {
 		}
 		
 		void free_texture() {
-			if(texture.texture) {
-				wlr_texture_destroy(texture.texture);
-				texture.texture = nullptr;
-			}
+			texture.reset();
 			first_render_done = false;
 		}
 		
@@ -298,18 +295,22 @@ class ws_node_cairo : public ws_node_base {
 		/* create our wlr_texture from our cairo surface */
 		bool create_texture() {
 			free_texture();
-			texture.texture = wlr_texture_from_pixels(wf::get_core().renderer,
+			wlr_texture* wtexture = wlr_texture_from_pixels(wf::get_core().renderer,
 				DRM_FORMAT_ARGB8888, cairo_image_surface_get_stride(surface),
 				cairo_image_surface_get_width(surface),
 				cairo_image_surface_get_height(surface),
 				cairo_image_surface_get_data(surface));
-			return (texture.texture != nullptr);
+			if(wtexture) {
+				texture = wf::texture_t::from_texture(wtexture);
+				return true;
+			}
+			return false;
 		}
 		
 		virtual bool update_texture(const wf::geometry_t& d) = 0;
 	
 	public:
-		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_) {
+		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_), texture(nullptr) {
 			/* nothing else to do, we will allocate a buffer when first drawing */			
 		}
 		
@@ -324,6 +325,13 @@ class ws_node_cairo : public ws_node_base {
 			if(stroke_width == 0) return;
 			if(!ensure_surface()) return;
 			
+			wf::dimensions_t dim = output->get_screen_size();
+			x1 = std::clamp(x1, 0, std::max(dim.width - 1, 0));
+			x2 = std::clamp(x2, 0, std::max(dim.width - 1, 0));
+			y1 = std::clamp(y1, 0, std::max(dim.height - 1, 0));
+			y2 = std::clamp(y2, 0, std::max(dim.height - 1, 0));
+			if (x1 == x2 && y1 == y2) return;
+			
 			wf::color_t color = stroke_color;
 			cairo_set_line_width(ctx, stroke_width);
 			cairo_set_source_rgba(ctx, color.r, color.g, color.b, color.a);
@@ -336,7 +344,7 @@ class ws_node_cairo : public ws_node_base {
 			pad_damage_rect(d, stroke_width);
 			
 			bool res;
-			if(!texture.texture) res = create_texture();
+			if(!texture) res = create_texture();
 			else res = update_texture(d);
 			
 			if(res) {
@@ -363,9 +371,7 @@ class ws_node_cairo : public ws_node_base {
 			return {0, 0, dim.width, dim.height};
 		}
 		
-		wf::texture_t get_texture() override {
-			return texture;
-		}
+		std::shared_ptr<wf::texture_t> get_texture() override = 0;
 };
 
 class ws_node_pixman : public ws_node_cairo {
@@ -429,7 +435,7 @@ class ws_node_pixman : public ws_node_cairo {
 			if(!first_render_done) return true;
 			
 			/* Copy the damaged area to our texture if needed, which is a pixman image */
-			pixman_image_t *img = wlr_pixman_texture_get_image(texture.texture);
+			pixman_image_t *img = wlr_pixman_texture_get_image(texture->get_wlr_texture());
 			if(!img) {
 				LOGE("Cannot access pixman texture data!");
 				return false;
@@ -440,6 +446,13 @@ class ws_node_pixman : public ws_node_cairo {
 				LOGE("Pixman texture data in incorrect format!");
 				return false;
 			}
+			
+			wf::dimensions_t dim = output->get_screen_size();
+			int x1 = std::clamp(damage_acc.x, 0, std::max(dim.width - 1, 0));
+			int x2 = std::clamp(damage_acc.x + damage_acc.width, 0, dim.width);
+			int y1 = std::clamp(damage_acc.y, 0, std::max(dim.height - 1, 0));
+			int y2 = std::clamp(damage_acc.y + damage_acc.height, 0, dim.height);
+			if (x1 == x2 || y1 == y2) return false;
 			
 			uint8_t *dst = (uint8_t*)pixman_image_get_data(img);
 			int stride_dst = pixman_image_get_stride(img);
@@ -456,11 +469,12 @@ class ws_node_pixman : public ws_node_cairo {
 						int width, height;
 					};
 				 */
-				for(int y = damage_acc.y; y < damage_acc.y + damage_acc.height; y++) {
+				const size_t w = 4UL * (x2 - x1);
+				for(int y = y1; y < y2; y++) {
 					size_t base_src = y * stride_src;
 					size_t base_dst = y * stride_dst;
 					// note: each pixel is 4 bytes
-					std::memcpy(dst + base_dst + damage_acc.x * 4UL, src + base_src + damage_acc.x * 4UL, damage_acc.width * 4UL);
+					std::memcpy(dst + base_dst + x1 * 4UL, src + base_src + x1 * 4UL, w);
 				}
 			}
 			
@@ -473,14 +487,14 @@ class ws_node_pixman : public ws_node_cairo {
 	public:
 		ws_node_pixman(wf::output_t* output_) : ws_node_cairo(output_) { }
 		
-		wf::texture_t get_texture() override {
+		std::shared_ptr<wf::texture_t> get_texture() override {
 			/* This is called from the render() function, so we set here
 			 * that the first render pass was done, but also we schedule
 			 * an update to the now updated texture and re-submit the
 			 * accummulated damage. */
-			if(!first_render_done && texture.texture) {
+			if(!first_render_done && texture) {
 				idle_damage.run_once([this] () {
-					if(texture.texture) {
+					if(texture) {
 						wf::scene::node_damage_signal ev;
 						ev.region = damage_acc;
 						update_texture({});
@@ -509,7 +523,7 @@ class ws_node_vulkan : public ws_node_cairo {
 	public:
 		ws_node_vulkan(wf::output_t* output_) : ws_node_cairo(output_) { }
 		
-		wf::texture_t get_texture() override {
+		std::shared_ptr<wf::texture_t> get_texture() override {
 			/* I don't know how to update only part of a Vulkan-based wlr_texture,
 			 * so we just recreate the whole thing. This means re-uploading the
 			 * full surface to the GPU again unfortunately.
@@ -526,7 +540,7 @@ class ws_node_vulkan : public ws_node_cairo {
 
 void ws_render_instance::render(const wf::scene::render_instruction_t& data) {
 	auto texture = this->self->get_texture();
-	if(!texture.texture) return;
+	if(!texture) return;
 	auto geometry = this->self->output->get_relative_geometry();
 	data.pass->add_texture(texture, data.target, geometry, data.damage);
 }

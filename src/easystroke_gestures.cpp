@@ -21,6 +21,7 @@
 #include <wayfire/scene-render.hpp>
 #include <wayfire/core.hpp>
 #include <wayfire/signal-definitions.hpp>
+#include <wayfire/output-layout.hpp>
 #include <wayfire/util.hpp>
 #include <wayfire/util/log.hpp>
 #include <wayfire/opengl.hpp>
@@ -547,6 +548,126 @@ static std::shared_ptr<ws_node_base> get_ws_node(wf::output_t* output_) {
 }
 
 
+class wstroke;
+
+class wstroke_global : public wf::plugin_interface_t
+{
+	public:
+		std::unique_ptr<const ActionDB> actions;
+		input_headless input;
+		wf::wl_idle_call idle_generate;
+
+		wstroke_global() {
+			char* xdg_config = getenv("XDG_CONFIG_HOME");
+			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
+			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
+			config_file = config_dir + ActionDB::wstroke_actions_versions[0];
+		}
+		
+		~wstroke_global() { fini(); }
+
+		void init() {
+			/* start the headless backend, but not instantly since it
+			 * might be started automatically by the core multi_backend */
+			idle_generate.run_once([this] () {
+				input.init();
+			});
+
+			inotify_fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+			reload_config();
+			inotify_source = wl_event_loop_add_fd(wf::get_core().ev_loop, inotify_fd, WL_EVENT_READABLE,
+				config_updated, this);
+
+			auto& ol = wf::get_core().output_layout;
+			ol->connect(&on_output_added);
+			ol->connect(&on_output_removed);
+
+			for(auto wo : ol->get_outputs()) handle_new_output(wo);
+		}
+
+		void fini() {
+			on_output_added.disconnect();
+			on_output_removed.disconnect();
+
+			// for (auto& [output, inst] : output_instance) inst->fini();
+			output_instance.clear();
+
+			input.fini();
+
+			actions.reset();
+			if(inotify_source) {
+				wl_event_source_remove(inotify_source);
+				inotify_source = nullptr;
+			}
+			if(inotify_fd >= 0) {
+				close(inotify_fd);
+				inotify_fd = -1;
+			}
+		}
+
+	protected:
+		std::string config_dir;
+		std::string config_file;
+		int inotify_fd = -1;
+		struct wl_event_source* inotify_source = nullptr;
+		static constexpr size_t inotify_buffer_size = 10*(sizeof(struct inotify_event) + NAME_MAX + 1);
+		char inotify_buffer[inotify_buffer_size];
+		
+		std::map<wf::output_t*, std::unique_ptr<wstroke>> output_instance;
+		wf::signal::connection_t<wf::output_added_signal> on_output_added = [=] (wf::output_added_signal *ev) {
+			handle_new_output(ev->output);
+		};
+
+		wf::signal::connection_t<wf::output_pre_remove_signal> on_output_removed = [=] (wf::output_pre_remove_signal *ev) {
+			handle_output_removed(ev->output);
+		};
+
+		void handle_new_output(wf::output_t *output);
+
+		void handle_output_removed(wf::output_t *output);
+		
+		/* load / reload the configuration; also set up a watch for changes */
+		void reload_config() {
+			ActionDB* actions_tmp = new ActionDB();
+			if(actions_tmp) {
+				bool config_read = false;
+				try {
+					std::error_code ec;
+					if(std::filesystem::exists(config_file, ec) && std::filesystem::is_regular_file(config_file, ec))
+						config_read = actions_tmp->read(config_file, true);
+					else {
+						std::string config_file_old = config_dir + ActionDB::wstroke_actions_versions[1];
+						config_read = actions_tmp->read(config_file_old, true);
+					}
+				}
+				catch(std::exception& e) {
+					LOGE(e.what());
+				}
+				if(!config_read) {
+					LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
+					delete actions_tmp;
+				}
+				else actions.reset(actions_tmp);
+			}
+			if(inotify_fd >= 0) {
+				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
+				inotify_add_watch(inotify_fd, config_file.c_str(), IN_CLOSE_WRITE);
+			}
+		}
+		
+		void handle_config_updated() {
+			while(read(inotify_fd, inotify_buffer, inotify_buffer_size) > 0) { }
+			reload_config();
+		}
+		
+		static int config_updated(int fd, uint32_t mask, void* ptr) {
+			wstroke_global* w = (wstroke_global*)ptr;
+			w->handle_config_updated();
+			return 0;
+		}
+		
+};
+
 class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t, ActionVisitor {
 	protected:
 		wf::option_wrapper_t<wf::buttonbinding_t> initiate{"wstroke/initiate"};
@@ -592,16 +713,10 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		};
 		
 		Stroke::PreStroke ps;
-		std::unique_ptr<const ActionDB> actions;
-		input_headless input;
 		wf::wl_idle_call idle_generate;
 		wayfire_view target_view;
 		wayfire_view initial_active_view;
 		wayfire_view mouse_view;
-		int inotify_fd = -1;
-		struct wl_event_source* inotify_source = nullptr;
-		static constexpr size_t inotify_buffer_size = 10*(sizeof(struct inotify_event) + NAME_MAX + 1);
-		char inotify_buffer[inotify_buffer_size];
 		
 		/* true if we need to refocus the initial view after the gesture
 		 * action -- refocusing might be done by the action visitor or
@@ -626,9 +741,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		bool ptr_moved = false;
 		wf::wl_timer<false> timeout;
 		
-		std::string config_dir;
-		std::string config_file;
-		
 		/* Handle views being unmapped -- needed to avoid segfault if the "target" views disappear */
 		wf::signal::connection_t<wf::view_unmapped_signal> view_unmapped = [=] (wf::view_unmapped_signal *ev) {
 			auto view = ev->view;
@@ -647,32 +759,18 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		 * (i.e. added to the scenegraph) iff. is_gesture == true */
 		std::shared_ptr<ws_node_base> overlay_node;
 		
+		/* global plugin instance -- contains the main settings and the input generator */
+		wstroke_global* parent;
+		
 	public:
-		wstroke() {
-			char* xdg_config = getenv("XDG_CONFIG_HOME");
-			if(xdg_config) config_dir = std::string(xdg_config) + "/wstroke/";
-			else config_dir = std::string(getenv("HOME")) + "/.config/wstroke/";
-			config_file = config_dir + ActionDB::wstroke_actions_versions[0];
-		}
+		wstroke(wstroke_global* _parent) : parent(_parent) { }
 		~wstroke() { fini(); }
 		
 		void init() override {
-			inotify_fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-			reload_config();
-			inotify_source = wl_event_loop_add_fd(wf::get_core().ev_loop, inotify_fd, WL_EVENT_READABLE,
-				config_updated, this);
-			
-			/* start the headless backend, but not instantly since it
-			 * might be started automatically by the core multi_backend */
-			idle_generate.run_once([this] () {
-				input.init();
-			});
-			
 			overlay_node = get_ws_node(output);
 			
 			wf::get_core().connect(&on_raw_pointer_button);
 			wf::get_core().connect(&on_raw_pointer_motion);
-			// wf::get_core().connect_signal("keyboard_key_post", &ignore_key_cb); -- ignore does not work combined with the real keyboard
 			
 			input_grab = std::make_unique<wf::input_grab_t>(this->grab_interface.name, output, nullptr, this, nullptr);
 			input_grab->set_wants_raw_input(true);
@@ -682,18 +780,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(active) cancel_stroke();
 			on_raw_pointer_button.disconnect();
 			on_raw_pointer_motion.disconnect();
-			// ignore_key_cb.disconnect();
-			input.fini();
 			overlay_node = nullptr;
-			actions.reset();
-			if(inotify_source) {
-				wl_event_source_remove(inotify_source);
-				inotify_source = nullptr;
-			}
-			if(inotify_fd >= 0) {
-				close(inotify_fd);
-				inotify_fd = -1;
-			}
 		}
 		
 		/* pointer tracking interface */
@@ -702,7 +789,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			auto geom = output->get_layout_geometry();
 			handle_input_move(pointer_position.x - geom.x, pointer_position.y - geom.y);
 		}
-		
 		
 		/* visitor interface for carrying out actions */
 		void visit(const Command* action) override {
@@ -717,12 +803,12 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				set_idle_action([this, mod, key] () {
 					uint32_t t = wf::get_current_time();
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
-					if(mod) input.keyboard_mods(mod, 0, 0);
-					input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_PRESSED);
+					if(mod) parent->input.keyboard_mods(mod, 0, 0);
+					parent->input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_PRESSED);
 					t++;
-					input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_RELEASED);
+					parent->input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_RELEASED);
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
-					if(mod) input.keyboard_mods(0, 0, 0);
+					if(mod) parent->input.keyboard_mods(0, 0, 0);
 				});
 			}
 		}
@@ -737,7 +823,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			set_idle_action([this, ignore_mods] () {
 				uint32_t t = wf::get_current_time();
 				keyboard_modifiers(t, ignore_mods, WL_KEYBOARD_KEY_STATE_PRESSED);
-				input.keyboard_mods(ignore_mods, 0, 0);
+				parent->input.keyboard_mods(ignore_mods, 0, 0);
 				ignore_active = ignore_mods;
 			});
 		}
@@ -765,14 +851,14 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				uint32_t t = wf::get_current_time();
 				if(mod) {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
-					input.keyboard_mods(mod, 0, 0);
+					parent->input.keyboard_mods(mod, 0, 0);
 				}
-				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_PRESSED);
+				parent->input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_PRESSED);
 				t++;
-				input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_RELEASED);
+				parent->input.pointer_button(t, btn, WL_POINTER_BUTTON_STATE_RELEASED);
 				if(mod) {
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
-					input.keyboard_mods(0, 0, 0);
+					parent->input.keyboard_mods(0, 0, 0);
 				}
 			});
 		}
@@ -837,9 +923,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 									 * commence from the current pointer location */
 									ignore_next_own_btn = true;
 									uint32_t t = wf::get_current_time();
-									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+									parent->input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
 									t++;
-									input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+									parent->input.pointer_button(t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
 									wf::get_core().default_wm->move_request(toplevel);
 								}
 							}
@@ -889,7 +975,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				if(mods) {
 					uint32_t t = wf::get_current_time();
 					keyboard_modifiers(t, mods, WL_KEYBOARD_KEY_STATE_PRESSED);
-					input.keyboard_mods(mods, 0, 0);
+					parent->input.keyboard_mods(mods, 0, 0);
 					ignore_active = mods;
 				}
 				start_touchpad(type, fingers, wf::get_current_time());
@@ -910,46 +996,6 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				view_unmapped.disconnect();
 			});
 			needs_refocus = false;
-		}
-		
-		/* load / reload the configuration; also set up a watch for changes */
-		void reload_config() {
-			ActionDB* actions_tmp = new ActionDB();
-			if(actions_tmp) {
-				bool config_read = false;
-				try {
-					std::error_code ec;
-					if(std::filesystem::exists(config_file, ec) && std::filesystem::is_regular_file(config_file, ec))
-						config_read = actions_tmp->read(config_file, true);
-					else {
-						std::string config_file_old = config_dir + ActionDB::wstroke_actions_versions[1];
-						config_read = actions_tmp->read(config_file_old, true);
-					}
-				}
-				catch(std::exception& e) {
-					LOGE(e.what());
-				}
-				if(!config_read) {
-					LOGW("Could not find configuration file. Run the wstroke-config program first to assign actions to gestures.");
-					delete actions_tmp;
-				}
-				else actions.reset(actions_tmp);
-			}
-			if(inotify_fd >= 0) {
-				inotify_add_watch(inotify_fd, config_dir.c_str(), IN_CREATE | IN_MOVED_TO);
-				inotify_add_watch(inotify_fd, config_file.c_str(), IN_CLOSE_WRITE);
-			}
-		}
-		
-		void handle_config_updated() {
-			while(read(inotify_fd, inotify_buffer, inotify_buffer_size) > 0) { }
-			reload_config();
-		}
-		
-		static int config_updated(int fd, uint32_t mask, void* ptr) {
-			wstroke* w = (wstroke*)ptr;
-			w->handle_config_updated();
-			return 0;
 		}
 		
 		/* Determine which corner of a view to start a resize action from. */
@@ -987,7 +1033,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		/* callback when the stroke mouse button is pressed */
 		bool start_stroke(int32_t x, int32_t y) {
-			if(!actions) return false;
+			if(!parent->actions) return false;
 			if(active) {
 				LOGW("already active!");
 				return false;
@@ -1009,7 +1055,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			
 			if(target_view) {
 				const std::string& app_id = target_view->get_app_id();
-				if(actions->exclude_app(app_id)) {
+				if(parent->actions->exclude_app(app_id)) {
 					LOGD("Excluding strokes for app: ", app_id);
 					if(initial_active_view != mouse_view) check_focus_mouse_view();
 					return false;
@@ -1089,9 +1135,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				if(target_view) {
 					const std::string& app_id = target_view->get_app_id();
 					LOGD("Target app id: ", app_id);
-					matcher = actions->get_action_list(app_id);
+					matcher = parent->actions->get_action_list(app_id);
 				}
-				if(!matcher) matcher = actions->get_root();
+				if(!matcher) matcher = parent->actions->get_root();
 				
 				Ranking rr;
 				Action* action = matcher->handle(stroke, &rr);
@@ -1123,8 +1169,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					const wf::buttonbinding_t& tmp = initiate;
 					auto t = wf::get_current_time();
 					own_button = true; // will be reset to false in on_raw_pointer_button ()
-					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
-					input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
+					parent->input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
+					parent->input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
 					view_unmapped.disconnect();
 				});
 			}
@@ -1137,7 +1183,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			if(ignore_active) {
 				uint32_t t = wf::get_current_time();
 				keyboard_modifiers(t, ignore_active, WL_KEYBOARD_KEY_STATE_RELEASED);
-				input.keyboard_mods(0, 0, 0);
+				parent->input.keyboard_mods(0, 0, 0);
 				ignore_active = 0;
 			}
 		}
@@ -1166,10 +1212,10 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			touchpad_fingers = fingers;
 			switch(type) {
 				case Touchpad::Type::SWIPE:
-					input.pointer_start_swipe(time_msec, touchpad_fingers);
+					parent->input.pointer_start_swipe(time_msec, touchpad_fingers);
 					break;
 				case Touchpad::Type::PINCH:
-					input.pointer_start_pinch(time_msec, touchpad_fingers);
+					parent->input.pointer_start_pinch(time_msec, touchpad_fingers);
 					touchpad_last_angle = -1.0 * M_PI / 2.0;
 					touchpad_last_scale = 1.0;
 					break;
@@ -1184,10 +1230,10 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		void end_touchpad(bool cancelled = false) {
 			switch(touchpad_active) {
 				case Touchpad::Type::SWIPE:
-					input.pointer_end_swipe(wf::get_current_time(), cancelled);
+					parent->input.pointer_end_swipe(wf::get_current_time(), cancelled);
 					break;
 				case Touchpad::Type::PINCH:
-					input.pointer_end_pinch(wf::get_current_time(), cancelled);
+					parent->input.pointer_end_pinch(wf::get_current_time(), cancelled);
 					break;
 				case Touchpad::Type::NONE:
 				case Touchpad::Type::SCROLL:
@@ -1204,7 +1250,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					next_release_touchpad = true;
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 				}
-				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event))
+				else if(ignore_next_own_btn && parent->input.is_own_event_btn(ev->event))
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 				else if (!active && !own_button && wf::get_core().seat->get_active_output() == output) {
 					wf::buttonbinding_t tmp = initiate;
@@ -1219,7 +1265,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					next_release_touchpad = false;
 				}
-				else if(ignore_next_own_btn && input.is_own_event_btn(ev->event)) {
+				else if(ignore_next_own_btn && parent->input.is_own_event_btn(ev->event)) {
 					ev->mode = wf::input_event_processing_mode_t::IGNORE;
 					ignore_next_own_btn = false;
 				}
@@ -1265,11 +1311,11 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 							delta = ev->event->delta_y;
 							o = WSTROKE_AXIS_VERTICAL;
 						}
-						input.pointer_scroll(ev->event->time_msec + 1, 0.2 * delta * touchpad_scroll_sensitivity, o);
+						parent->input.pointer_scroll(ev->event->time_msec + 1, 0.2 * delta * touchpad_scroll_sensitivity, o);
 					}
 					break;
 				case Touchpad::Type::SWIPE:
-					input.pointer_update_swipe(ev->event->time_msec + 1, touchpad_fingers, ev->event->delta_x, ev->event->delta_y);
+					parent->input.pointer_update_swipe(ev->event->time_msec + 1, touchpad_fingers, ev->event->delta_x, ev->event->delta_y);
 					break;
 				case Touchpad::Type::PINCH:
 					{
@@ -1292,13 +1338,13 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 						else touchpad_last_angle = new_angle;
 						double scale_factor = (delta_angle_diff > 0.5) ? std::hypot(new_pos.x, new_pos.y) / sensitivity : 1.0;
 						touchpad_last_scale *= scale_factor;
-						input.pointer_update_pinch(time_msec, 2, 0.0, 0.0, touchpad_last_scale, -180.0 * angle_diff / M_PI);
+						parent->input.pointer_update_pinch(time_msec, 2, 0.0, 0.0, touchpad_last_scale, -180.0 * angle_diff / M_PI);
 						*/
 						double scale_factor = (sensitivity - ev->event->delta_y) / sensitivity;
 						if(scale_factor > 0.0) {
 							touchpad_last_scale *= scale_factor;
 							uint32_t time_msec = ev->event->time_msec + 1;
-							input.pointer_update_pinch(time_msec, touchpad_fingers, 0.0, 0.0, touchpad_last_scale, 0.0);
+							parent->input.pointer_update_pinch(time_msec, touchpad_fingers, 0.0, 0.0, touchpad_last_scale, 0.0);
 						}
 					}
 					break;
@@ -1334,11 +1380,24 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		
 		void keyboard_modifiers(uint32_t t, uint32_t mod, enum wl_keyboard_key_state state) {
 			for(const auto& x : mod_map) 
-				if(x.first & mod) input.keyboard_key(t, x.second, state);
+				if(x.first & mod) parent->input.keyboard_key(t, x.second, state);
 		}
 };
 
+void wstroke_global::handle_new_output(wf::output_t *output) {
+	auto inst = std::make_unique<wstroke>(this);
+	inst->output = output;
+	auto ptr = inst.get();
+	output_instance[output] = std::move(inst);
+	ptr->init();
+}
+
+void wstroke_global::handle_output_removed(wf::output_t *output) {
+	output_instance[output]->fini();
+	output_instance.erase(output);
+}
+
 constexpr std::array<std::pair<enum wlr_keyboard_modifier, uint32_t>, 4> wstroke::mod_map;
 
-DECLARE_WAYFIRE_PLUGIN(wf::per_output_plugin_t<wstroke>)
+DECLARE_WAYFIRE_PLUGIN(wstroke_global)
 

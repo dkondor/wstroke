@@ -22,10 +22,14 @@
 #define INPUT_EVENTS_HPP
 
 extern "C" {
+// note: math.h will be included later by wlroots and it does not work with the below define
+#include <math.h>
 #include <wlr/version.h>
+#define static
 #include <wlr/backend.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>
+#undef static
 #include <wayland-server-protocol.h>
 }
 

@@ -4,12 +4,14 @@ Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a
 
 Packages are available for:
  - Ubuntu 24.04: https://launchpad.net/~kondor-dani/+archive/ubuntu/ppa-wstroke
- - Debian (testing and unstable): in the official [repository](https://packages.debian.org/testing/wstroke).
+ - Ubuntu 25.10 and newer: in the official [repository](https://packages.ubuntu.com/resolute/wstroke).
+ - Debian 13 and newer: in the official [repository](https://packages.debian.org/trixie/wstroke).
+ - Arch: on [AUR](https://aur.archlinux.org/packages/wstroke-git)
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire), version [0.10.0](https://github.com/WayfireWM/wayfire/tree/v0.10.0) or newer (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
- - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.19](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.19?ref_type=heads).
+ - [Wayfire](https://github.com/WayfireWM/wayfire), latest development version (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
+ - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.20](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.20?ref_type=heads).
  - Development libraries for GTK, GDK, glib, cairo, pixman, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libcairo2-dev, libpixman-1-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
  - [Vala](https://vala.dev/) compiler (for building, Ubuntu package: `valac`; or use the [no_vala](https://github.com/dkondor/wstroke/tree/no_vala) branch instead)

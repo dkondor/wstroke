@@ -30,7 +30,6 @@
 #include "actiondb.h"
 #include "ecres.h"
 #include "convert_keycodes.h"
-#include "input_inhibitor.h"
 #include "config.h"
 
 static void error_dialog(const Glib::ustring &text) {
@@ -181,9 +180,6 @@ void startup(Gtk::Application* app, Actions** p_actions)
 		if(!keycode_err_msg.empty()) text += (keycode_err_msg + "\n\n");
 		d = new Gtk::MessageDialog(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	}
-	
-	if(!input_inhibitor_init())
-		fprintf(stderr, _("Could not initialize keyboard grabber interface. Assigning key combinations might not work.\n"));
 	
 	actions->startup(app, d);
 }

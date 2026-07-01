@@ -16,13 +16,13 @@ configure_file(input: 'config.h.in',
 # silence warnings
 cellib = static_library('cellib', 'cellrenderertextish.vala',
 		vala_header: 'cellrenderertextish.h',
-		dependencies: [glib, gobject, gtk, input_inhibitor_dep])
+		dependencies: [glib, gobject, gtk])
 
 wconf_sources = ['main.cc', 'actiondb_config.cc', 'actiondb.cc', 'actions.cc',
                  'appchooser.cc', 'gesture.cc', 'stroke_draw.cc', 'stroke.c',
                  'convert_keycodes.cc', 'stroke_drawing_area.cpp', econf_res]
 wconf = executable('wstroke-config', wconf_sources,
-        dependencies: [gtkmm, gdkmm, wlroots_headers, boost, protos, input_inhibitor_dep, toplevel_grabber_dep],
+        dependencies: [gtkmm, gdkmm, wlroots_headers, boost, toplevel_grabber_dep],
         install: true,
         cpp_args: ['-DACTIONDB_CONVERT_CODES', '-DWLR_USE_UNSTABLE'],
         link_with: cellib)

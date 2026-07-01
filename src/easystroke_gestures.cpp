@@ -92,22 +92,42 @@ class ws_render_instance : public wf::scene::simple_render_instance_t<ws_node_ba
 };
 
 
+/* Small helper to get the size of an output as integers as we need it
+ * as integers in most places.
+ * Note: get_screen_size() returns wf::dimensionsf_t, but the output
+ * actually stores integers and only casts them to float in that call,
+ * so it is safe to cast back to integer below. */
+static wf::dimensions_t get_screen_size_int(const wf::output_t* output) {
+	auto tmp = output->get_screen_size();
+	return {(int32_t)tmp.width, (int32_t)tmp.height};
+}
+
+
 /** 
  * Node to draw lines on the screen, a simplified version of annotate.
  * This is a base class that does nothing. Derived classes implement
  * actual rendering based on the render backend in use. */
 class ws_node_base : public wf::scene::node_t {
 	protected:
+		struct box {
+			int32_t x, y, width, height;
+			wf::geometry_t to_geom() const {
+				return {(double)x, (double)y, (double)width, (double)height};
+			}
+		};
+		
 		wf::option_wrapper_t<wf::color_t> stroke_color{"wstroke/stroke_color"};
 		wf::option_wrapper_t<int> stroke_width{"wstroke/stroke_width"};
 		
 		/* Helper to apply damage after updating the current stroke */
-		static void pad_damage_rect(wf::geometry_t& damageRect, float stroke_width) {
+		static void pad_damage_rect(box& damageRect, float stroke_width) {
 			damageRect.x = std::floor(damageRect.x - stroke_width / 2.0);
 			damageRect.y = std::floor(damageRect.y - stroke_width / 2.0);
 			damageRect.width += std::ceil(stroke_width + 1);
 			damageRect.height += std::ceil(stroke_width + 1);
 		}
+		
+		virtual bool draw_line_internal(int x1, int y1, int x2, int y2, const box& damage) { return false; }
 	
 	public:
 		ws_node_base(wf::output_t* output_) : node_t(false), output(output_) { }
@@ -118,7 +138,25 @@ class ws_node_base : public wf::scene::node_t {
 		
 		/** Main interface used by our plugin: */
 		/* draw a line into our overlay between the given points */
-		virtual void draw_line(int x1, int y1, int x2, int y2) { }
+		void draw_line(int x1, int y1, int x2, int y2) {
+			if(stroke_width == 0) return;
+			
+			wf::dimensions_t dim = get_screen_size_int(output);
+			x1 = std::clamp(x1, 0, std::max(dim.width - 1, 0));
+			x2 = std::clamp(x2, 0, std::max(dim.width - 1, 0));
+			y1 = std::clamp(y1, 0, std::max(dim.height - 1, 0));
+			y2 = std::clamp(y2, 0, std::max(dim.height - 1, 0));
+			if (x1 == x2 && y1 == y2) return;
+			
+			box d{std::min(x1, x2), std::min(y1, y2), std::abs(x1 - x2), std::abs(y1 - y2)};
+			pad_damage_rect(d, stroke_width);
+			
+			if(!draw_line_internal(x1, y1, x2, y2, d)) return;
+			
+			wf::scene::node_damage_signal ev;
+			ev.region = d.to_geom(); /* note: implicit conversion to wf::region_t */
+			this->emit(&ev);
+		}
 		
 		/* clear everything rendered by this plugin and deallocate any textrue or framebuffer used */
 		virtual void clear_lines() { }
@@ -151,7 +189,7 @@ class ws_node_egl : public ws_node_base {
 		 * has not been allocated yet, according to the current
 		 * output size */
 		bool ensure_fb() {
-			auto dim = output->get_screen_size();
+			auto dim = get_screen_size_int(output);
 			auto ret = fb.allocate(dim); //!! TODO: is it guaranteed that this will allocate an EGL buffer?
 			
 			if (ret == wf::buffer_reallocation_result_t::REALLOCATED) {
@@ -182,19 +220,10 @@ class ws_node_egl : public ws_node_base {
 			color_program.deactivate();
 		}
 		
-	public:
-		ws_node_egl(wf::output_t* output_) : ws_node_base(output_) {
-			wf::gles::run_in_context([&] {
-				color_program.set_simple(OpenGL::compile_program(
-					default_vertex_shader_source, color_rect_fragment_source));
-			});
-		}
-		
-		void draw_line(int x1, int y1, int x2, int y2) override {
-			if(stroke_width == 0) return;
-			if(!ensure_fb()) return;
+		bool draw_line_internal(int x1, int y1, int x2, int y2, const box&) override {
+			if(!ensure_fb()) return false;
 			
-			wf::dimensions_t dim = output->get_screen_size();
+			auto dim = output->get_screen_size();
 			auto ortho = glm::ortho(0.0f, (float)dim.width, 0.0f, (float)dim.height);
 			
 			wf::gles::run_in_context([&] {
@@ -204,12 +233,15 @@ class ws_node_egl : public ws_node_base {
 				render_vertices(vertexData, 2, stroke_color, GL_LINES, ortho);
 			});
 			
-			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
-			pad_damage_rect(d, stroke_width);
-			
-			wf::scene::node_damage_signal ev;
-			ev.region = d; /* note: implicit conversion to wf::region_t */
-			this->emit(&ev);
+			return true;
+		}
+		
+	public:
+		ws_node_egl(wf::output_t* output_) : ws_node_base(output_) {
+			wf::gles::run_in_context([&] {
+				color_program.set_simple(OpenGL::compile_program(
+					default_vertex_shader_source, color_rect_fragment_source));
+			});
 		}
 		
 		void clear_lines() override {
@@ -224,8 +256,8 @@ class ws_node_egl : public ws_node_base {
 		}
 		
 		wf::geometry_t get_bounding_box() override {
-			wf::dimensions_t dim = output->get_screen_size();
-			return {0, 0, dim.width, dim.height};
+			auto dim = output->get_screen_size();
+			return {0.0, 0.0, dim.width, dim.height};
 		}
 		
 		std::shared_ptr<wf::texture_t> get_texture() override {
@@ -247,7 +279,7 @@ class ws_node_cairo : public ws_node_base {
 	
 	private:
 		bool ensure_surface() {
-			auto dim = output->get_screen_size();
+			auto dim = get_screen_size_int(output);
 			
 			if(surface) {
 				if(cairo_image_surface_get_height(surface) != dim.height ||
@@ -307,30 +339,10 @@ class ws_node_cairo : public ws_node_base {
 			return false;
 		}
 		
-		virtual bool update_texture(const wf::geometry_t& d) = 0;
+		virtual bool update_texture(const box& d) = 0;
 	
-	public:
-		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_), texture(nullptr) {
-			/* nothing else to do, we will allocate a buffer when first drawing */			
-		}
-		
-		~ws_node_cairo() {
-			/* Destroy our texture first, as it might refer to the same memory
-			 * as our cairo surface. */
-			free_texture();
-			free_cairo();
-		}
-		
-		void draw_line(int x1, int y1, int x2, int y2) override {
-			if(stroke_width == 0) return;
-			if(!ensure_surface()) return;
-			
-			wf::dimensions_t dim = output->get_screen_size();
-			x1 = std::clamp(x1, 0, std::max(dim.width - 1, 0));
-			x2 = std::clamp(x2, 0, std::max(dim.width - 1, 0));
-			y1 = std::clamp(y1, 0, std::max(dim.height - 1, 0));
-			y2 = std::clamp(y2, 0, std::max(dim.height - 1, 0));
-			if (x1 == x2 && y1 == y2) return;
+		bool draw_line_internal(int x1, int y1, int x2, int y2, const box& d) override {
+			if(!ensure_surface()) return false;
 			
 			wf::color_t color = stroke_color;
 			cairo_set_line_width(ctx, stroke_width);
@@ -340,18 +352,23 @@ class ws_node_cairo : public ws_node_base {
 			cairo_stroke(ctx);
 			cairo_surface_flush(surface);
 			
-			wf::geometry_t d{std::min(x1,x2), std::min(y1,y2), std::abs(x1-x2), std::abs(y1-y2)};
-			pad_damage_rect(d, stroke_width);
-			
 			bool res;
 			if(!texture) res = create_texture();
 			else res = update_texture(d);
 			
-			if(res) {
-				wf::scene::node_damage_signal ev;
-				ev.region = d; /* note: implicit conversion to wf::region_t */
-				this->emit(&ev);
-			}
+			return res;
+		}
+		
+	public:
+		ws_node_cairo(wf::output_t* output_) : ws_node_base(output_), texture(nullptr) {
+			/* nothing else to do, we will allocate a buffer when first drawing */
+		}
+		
+		~ws_node_cairo() {
+			/* Destroy our texture first, as it might refer to the same memory
+			 * as our cairo surface. */
+			free_texture();
+			free_cairo();
 		}
 		
 		void clear_lines() override {
@@ -367,8 +384,8 @@ class ws_node_cairo : public ws_node_base {
 		}
 		
 		wf::geometry_t get_bounding_box() override {
-			wf::dimensions_t dim = output->get_screen_size();
-			return {0, 0, dim.width, dim.height};
+			auto dim = output->get_screen_size();
+			return {0.0, 0.0, dim.width, dim.height};
 		}
 		
 		std::shared_ptr<wf::texture_t> get_texture() override = 0;
@@ -376,10 +393,10 @@ class ws_node_cairo : public ws_node_base {
 
 class ws_node_pixman : public ws_node_cairo {
 	private:
-		wf::geometry_t damage_acc{};
+		box damage_acc{};
 		wf::wl_idle_call idle_damage;
 		
-		void extend_damage(const wf::geometry_t& d) {
+		void extend_damage(const box& d) {
 			if(damage_acc.width == 0 && damage_acc.height == 0) {
 				damage_acc = d;
 				return;
@@ -393,7 +410,7 @@ class ws_node_pixman : public ws_node_cairo {
 		}
 		
 	protected:
-		bool update_texture(const wf::geometry_t& d) override {
+		bool update_texture(const box& d) override {
 			/**
 			 * wlroots' pixman renderer works with the following quirks when
 			 * using a texture created with wlr_texture_from_pixels():
@@ -447,7 +464,7 @@ class ws_node_pixman : public ws_node_cairo {
 				return false;
 			}
 			
-			wf::dimensions_t dim = output->get_screen_size();
+			wf::dimensions_t dim = get_screen_size_int(output);
 			int x1 = std::clamp(damage_acc.x, 0, std::max(dim.width - 1, 0));
 			int x2 = std::clamp(damage_acc.x + damage_acc.width, 0, dim.width);
 			int y1 = std::clamp(damage_acc.y, 0, std::max(dim.height - 1, 0));
@@ -496,7 +513,7 @@ class ws_node_pixman : public ws_node_cairo {
 				idle_damage.run_once([this] () {
 					if(texture) {
 						wf::scene::node_damage_signal ev;
-						ev.region = damage_acc;
+						ev.region = damage_acc.to_geom();
 						update_texture({});
 						this->emit(&ev);
 					}
@@ -512,7 +529,7 @@ class ws_node_vulkan : public ws_node_cairo {
 		bool need_update = false;
 	
 	protected:
-		bool update_texture(const wf::geometry_t& d) override {
+		bool update_texture(const box&) override {
 			/* Just mark that we need to update the overlay texture. It
 			 * will be recreated (re-uploaded to the GPU) at the next render.
 			 * This way, we have maximum one texture upload per render cycle. */

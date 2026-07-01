@@ -5,7 +5,7 @@ Port of [Easystroke mouse gestures](https://github.com/thjaeger/easystroke) as a
 Packages are available for:
  - Ubuntu 24.04: https://launchpad.net/~kondor-dani/+archive/ubuntu/ppa-wstroke
  - Ubuntu 25.10 and newer: in the official [repository](https://packages.ubuntu.com/resolute/wstroke).
- - Debian 13 and newer: in the official [repository](https://packages.debian.org/trixie/wstroke).
+ - Debian 13: in the official [repository](https://packages.debian.org/trixie/wstroke).
  - Arch: on [AUR](https://aur.archlinux.org/packages/wstroke-git)
 
 ### Dependencies

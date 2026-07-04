@@ -64,6 +64,14 @@ static void appid_cb(void* data, G_GNUC_UNUSED wfthandle* handle, const char* ap
 	struct toplevel* tl = (struct toplevel*)data;
 	if(tl->app_id) free(tl->app_id);
 	tl->app_id = strdup(app_id);
+	/* Note: Wayfire can include additional information in the app-id,
+	 * notably the ID set in gtk-shell and the ID used by its IPC (see
+	 * the "workarounds.app_id_mode" setting). These are separated by
+	 * spaces (which should not be part of an ID), so we should cut at
+	 * the first space if present as this info is not relevant for us.
+	 */
+	char *x = strchr(tl->app_id, ' ');
+	if(x) *x = 0;
 }
 
 void output_enter_cb(G_GNUC_UNUSED void* data, G_GNUC_UNUSED wfthandle* handle,

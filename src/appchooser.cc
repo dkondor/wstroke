@@ -28,7 +28,7 @@ AppChooser::AppBox::AppBox(Glib::RefPtr<Gio::AppInfo>& app_) : Gtk::Box(Gtk::Ori
 	name_lower = Glib::ustring(app->get_name()).lowercase();
 }
 
-void AppChooser::update_apps() {
+bool AppChooser::update_apps() {
 	bool tmp;
 	mutex.lock();
 	tmp = thread_running;
@@ -42,6 +42,8 @@ void AppChooser::update_apps() {
 		thread = std::thread(&AppChooser::thread_func, this);
 	}
 	update_pending = false;
+	update_timer = sigc::connection(); // no need to keep it, returning false will disconnect
+	return false;
 }
 
 void AppChooser::thread_func() {
@@ -78,16 +80,20 @@ void AppChooser::thread_func() {
 }
 
 
-void on_apps_changed(GAppInfoMonitor*, void* p) {
-	AppChooser* chooser = (AppChooser*)p;
-	if(chooser->update_pending) return;
-	chooser->update_pending = true;
+void AppChooser::schedule_update(unsigned int timeout) {
+	if(update_pending) return;
+	update_pending = true;
 	
-	Glib::signal_timeout().connect_seconds_once([chooser](){ chooser->update_apps(); }, 4);
+	update_timer = Glib::signal_timeout().connect_seconds([this](){ return update_apps(); }, timeout);
+}
+
+static void on_apps_changed(GAppInfoMonitor*, void* p) {
+	AppChooser* chooser = (AppChooser*)p;
+	chooser->schedule_update(4);
 }
 
 void AppChooser::startup() {
-	update_apps();
+	schedule_update(1);
 	monitor = g_app_info_monitor_get();
 	g_signal_connect(monitor, "changed", G_CALLBACK(on_apps_changed), this);
 	
@@ -214,6 +220,7 @@ AppChooser::~AppChooser() {
 	AppContent* tmp = apps_pending;
 	if(tmp) delete tmp;
 	sw->remove();
+	update_timer.disconnect();
 }
 
 

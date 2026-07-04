@@ -65,11 +65,12 @@ class AppChooser {
 		bool first_run = false;
 		
 		bool update_pending = false;
+		sigc::connection update_timer;
 		
-		void update_apps();
+		bool update_apps();
 		void thread_func();
 		
-		friend void on_apps_changed(GAppInfoMonitor*, void* p);
+		// friend void on_apps_changed(GAppInfoMonitor*, void* p);
 		
 		static int apps_sort(const Gtk::FlowBoxChild* x, const Gtk::FlowBoxChild* y);
 		bool apps_filter(const Gtk::FlowBoxChild* x) const;
@@ -83,7 +84,7 @@ class AppChooser {
 		~AppChooser();
 		
 		void startup();
-		
+		void schedule_update(unsigned int timeout);
 		bool run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command);
 };
 

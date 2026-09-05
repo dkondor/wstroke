@@ -1,4 +1,4 @@
-install_data('plugin-wstroke.svg', install_dir: wayfire.get_variable(pkgconfig: 'icondir'))
+install_data('plugin-wstroke.svg', install_dir: plugin_icon_dir)
 install_data('wstroke.svg',                        install_dir: join_paths(icon_dir, 'hicolor', 'scalable', 'apps'))
 install_data(join_paths('48x48',   'wstroke.png'), install_dir: join_paths(icon_dir, 'hicolor', '48x48',    'apps'))
 install_data(join_paths('64x64',   'wstroke.png'), install_dir: join_paths(icon_dir, 'hicolor', '64x64',    'apps'))

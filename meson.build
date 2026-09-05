@@ -16,9 +16,6 @@ project(
 
 # paths (only needed to install icon and desktop file)
 prefix = get_option('prefix')
-datadir = join_paths(prefix, get_option('datadir'))
-icon_dir = join_paths(datadir, 'icons')
-desktop_dir = join_paths(datadir, 'applications')
 
 # dependencies for loadable plugin
 boost    = dependency('boost', modules: ['serialization'], static: false)
@@ -71,12 +68,51 @@ wayland_scanner_client = generator(
 
 add_project_arguments(['--vapidir', meson.current_source_dir() + '/src'], language: 'vala')
 
+if get_option('wf_plugin')
+	# prefix will be ~/.local/share/wayfire/plugin-manager/install/
+
+	# things that need to go under the wf-plugin prefix
+	lib_dir = prefix / get_option('libdir') / 'wayfire'
+	metadata_dir = prefix / 'share' / 'wayfire' / 'metadata'
+	plugin_icon_dir = prefix / 'share' / 'wayfire' / 'icons'
+	
+	# components for the config binary -- should go under ~/.local
+	tmp1 = prefix.split('/')
+	if tmp1.length() < 3
+		error('Cannot parse wayfire-plugin prefix!')
+	endif
+	if tmp1[1] != 'home'
+		error('wayfire-plugin prefix does not seem to be under your home directory')
+	endif
+	bin_prefix = join_paths('/', tmp1[1], tmp1[2], '.local')
+	datadir = bin_prefix / get_option('datadir') # ~/.local/share
+	bindir = bin_prefix / get_option('bindir') # ~/.local/bin
+	icon_dir = join_paths(datadir, 'icons')
+	desktop_dir = join_paths(datadir, 'applications')
+else
+	lib_dir = wayfire.get_variable(pkgconfig: 'plugindir')
+	metadata_dir = wayfire.get_variable(pkgconfig: 'metadatadir')
+	plugin_icon_dir = wayfire.get_variable(pkgconfig: 'icondir')
+	
+	datadir = join_paths(prefix, get_option('datadir'))
+	bindir = prefix / get_option('bindir') # ~/.local/bin
+	icon_dir = join_paths(datadir, 'icons')
+	desktop_dir = join_paths(datadir, 'applications')
+endif
+
+
 subdir('toplevel-grabber')
 subdir('src')
 subdir('example')
 
+conf_data_desktop = configuration_data()
+conf_data_desktop.set('BINDIR', bindir)
+configure_file(input: 'wstroke-config.desktop.in',
+               output: 'wstroke-config.desktop',
+               install: true,
+               install_dir: desktop_dir,
+               configuration: conf_data_desktop)
 
-install_data('wstroke.xml', install_dir: wayfire.get_variable(pkgconfig: 'metadatadir'))
-install_data('wstroke-config.desktop', install_dir: desktop_dir)
-install_man('wstroke-config.1')
+install_data('wstroke.xml', install_dir: metadata_dir)
+install_man('wstroke-config.1') # might go under wf-plugins prefix, but we don't care since it is a stub anyway
 subdir('icons')

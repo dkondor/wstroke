@@ -1,0 +1,7 @@
+{
+  "name": "wstroke",
+  "setup": "Add wstroke to [core] plugins, or enable \"Mouse Gestures\" in WCM. Set up gestures by running \"WStroke config\".",
+  "build_commands": {
+    "setup": ["meson", "setup", "%builddir%", "%sourcedir%", "--prefix", "%prefix%", "-Dwf_plugin=true"]
+  }
+}

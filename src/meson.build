@@ -24,6 +24,7 @@ wconf_sources = ['main.cc', 'actiondb_config.cc', 'actiondb.cc', 'actions.cc',
 wconf = executable('wstroke-config', wconf_sources,
         dependencies: [gtkmm, gdkmm, wlroots_headers, boost, toplevel_grabber_dep],
         install: true,
+        install_dir: bindir,
         cpp_args: ['-DACTIONDB_CONVERT_CODES', '-DWLR_USE_UNSTABLE'],
         link_with: cellib)
 
@@ -32,7 +33,7 @@ wslib_sources = ['easystroke_gestures.cpp', 'input_events.cpp', 'actiondb.cc', '
 wslib = shared_module('wstroke', wslib_sources,
     dependencies: [wayfire, wlroots, wlserver, boost, glibmm, cairo, pixman],
     install: true,
-    install_dir: wayfire.get_variable(pkgconfig: 'plugindir'),
+    install_dir: lib_dir,
     cpp_args: ['-Wno-unused-parameter', '-Wno-format-security','-DWAYFIRE_PLUGIN', '-DWLR_USE_UNSTABLE'],
     link_args: '-rdynamic')
     

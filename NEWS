@@ -1,3 +1,7 @@
+2.6.0
+=========
+* Support instalation via wayfire-plugin.
+
 2.5.0
 =========
 * Support wlroots 0.20 and latest Wayfire.

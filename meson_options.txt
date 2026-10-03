@@ -1,0 +1,1 @@
+option('wf_plugin', type: 'boolean', value: false, description: 'Build plugin for local installation (e.g. via wayfire-plugin)')

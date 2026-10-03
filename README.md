@@ -10,7 +10,7 @@ Packages are available for:
 
 ### Dependencies
 
- - [Wayfire](https://github.com/WayfireWM/wayfire), latest development version (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
+ - [Wayfire](https://github.com/WayfireWM/wayfire), version 0.11 or later (see the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) if using older Wayfire versions).
  - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) version [0.20](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/0.20?ref_type=heads).
  - Development libraries for GTK, GDK, glib, cairo, pixman, gtkmm, gdkmm and boost-serialization (Ubuntu packages: `libglib2.0-dev, libgtk-3-dev, libcairo2-dev, libpixman-1-dev, libgtkmm-3.0-dev, libboost-serialization-dev`)
  - `glib-compile-resources` (Ubuntu package: `libglib2.0-dev-bin`)
@@ -20,13 +20,29 @@ Packages are available for:
 
 ### Building and installing
 
+Note: if you get build errors, your Wayfire version might be too old (or too new). See the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) for information about building wstroke with older Wayfire versions.
+
+
+#### Manually from source
+
+Use the standard meson commands from the directory where you cloned this repository to, i.e.:
 ```
 meson build
 ninja -C build
 sudo ninja -C build install
 ```
 
-If you get build errors, your Wayfire version might be too old (or too new). See the [wiki](https://github.com/dkondor/wstroke/wiki/Compilation-with-older-Wayfire-versions) for information about building wstroke with older Wayfire versions.
+#### Using wayfire-plugin
+
+Since version 0.11, Wayfire comes with the `wayfire-plugin` utility that can download, compile, and install plugins directly without the need to go through the compilation steps manually. Just run the following:
+```
+wayfire-plugin install https://github.com/dkondor/wstroke
+```
+
+Note:
+ - This will install `wstroke` only for the current user (do NOT run the above command as root!). If you have multiple user accounts on your computer, each will have to run this individually to install wstroke
+ - This will only work if your home directory is under `/home/{username}`; suggestions on how to improve things are welcome
+ - The configuration program (`wstroke-config`; see below) will be installed under `~/.local/bin`; you may need to add this to your `$PATH` to run it from the command line. Alternatively, the corresponding `wstroke-config.desktop` file will be installed under `~/.local/share/applications`, so it should show up in the system menu as expected.
 
 
 ### Running

@@ -138,7 +138,10 @@ class CellEditableAccel : Gtk.EventBox, Gtk.CellEditable {
 			case Gdk.Key.Hyper_R:
 				return true;
 		}
-		Gdk.ModifierType mods = event.state; /* & Gtk.accelerator_get_default_mod_mask(); -- does not work! */
+
+		/* Lock states should not become part of the captured key combination. */
+		Gdk.ModifierType mods = event.state &
+                     ~(Gdk.ModifierType.LOCK_MASK | Gdk.ModifierType.MOD2_MASK);
 
 		editing_done();
 		remove_widget();

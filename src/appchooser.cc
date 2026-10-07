@@ -133,7 +133,12 @@ bool AppChooser::apps_filter(const Gtk::FlowBoxChild* x) const {
 }
 
 bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command) {
-	if(!apps && !apps_pending) thread.join(); // in this case, the worker thread should be running
+	if(!apps && !apps_pending)
+	{
+		// in this case, the worker thread should be running -- only exception is if we have not started it yet from startup()
+		if(thread.joinable()) thread.join();
+		else return false;
+	}
 	
 	AppContent* tmp = nullptr;
 	tmp = apps_pending.exchange(tmp);

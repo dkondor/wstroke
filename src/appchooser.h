@@ -55,7 +55,7 @@ class AppChooser {
 		};
 		
 		std::unique_ptr<AppContent> apps;
-		std::atomic<AppContent*> apps_pending;
+		std::atomic<AppContent*> apps_pending{nullptr};
 		
 		std::thread thread;
 		std::mutex mutex;

@@ -30,6 +30,8 @@ class KeyCodes {
 		 * WLR modifier enum constants (take care of "virtual" modifiers
 		 * like SUPER, ALT, etc.) */
 		static uint32_t convert_modifier(uint32_t mod);
+		/* perform the reverse, but only to "real" modifiers (e.g. MOD?) */
+		static uint32_t convert_modifier_to_gdk(uint32_t mod);
 		/* add back "virtual" modifiers -- calls the corresponding GDK function */
 		static uint32_t add_virtual_modifiers(uint32_t mod);
 		/* try to convert a keysym to a hardware keycode; returns the

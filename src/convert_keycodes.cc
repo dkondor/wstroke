@@ -94,3 +94,12 @@ uint32_t KeyCodes::add_virtual_modifiers(uint32_t mod) {
 	return mod;
 }
 
+uint32_t KeyCodes::convert_modifier_to_gdk(uint32_t mod) {
+	uint32_t ret = 0;
+	for(auto p : modifier_match)
+		if(p.first != GDK_META_MASK && p.first != GDK_MOD4_MASK)	
+			if(mod & p.second) ret |= p.first;
+	return ret;
+}
+
+

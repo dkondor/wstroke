@@ -1045,7 +1045,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		 * care of refocusing the original view if needed */
 		void call_plugin(const std::string& plugin_activator, bool include_view = false, wf::json_t&& data = wf::json_t()) {
 			data["output_id"] = output->get_id();
-			if(include_view) data["view_id"] = target_view->get_id();
+			if(include_view && target_view) data["view_id"] = target_view->get_id();
 			set_idle_action([this, plugin_activator, data] () {
 				LOGI("Call plugin: ", plugin_activator);
 				wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repo;

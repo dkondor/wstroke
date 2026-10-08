@@ -76,7 +76,7 @@ class AppChooser {
 		
 		static int apps_sort(const Gtk::FlowBoxChild* x, const Gtk::FlowBoxChild* y);
 		bool apps_filter(const Gtk::FlowBoxChild* x) const;
-		void update_display_priv(); // update displayed apps
+		void update_display(); // update displayed apps
 		
 	public:
 		Glib::RefPtr<Gio::AppInfo> res_app;
@@ -89,7 +89,6 @@ class AppChooser {
 		void startup();
 		void schedule_update(unsigned int timeout);
 		bool run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command);
-		void update_display(); // update displayed apps if no apps have been displayed yet
 };
 
 #endif

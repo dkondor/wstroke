@@ -48,7 +48,7 @@ bool AppChooser::update_apps() {
 
 gboolean idle_results(void* ptr) {
 	AppChooser* tmp = (AppChooser*)ptr;
-	tmp->update_display();
+	if(!tmp->apps) tmp->update_display();
 	std::lock_guard<std::mutex> lock(tmp->mutex);
 	tmp->idle_source = 0;
 	return FALSE; // remove the source
@@ -145,7 +145,7 @@ bool AppChooser::apps_filter(const Gtk::FlowBoxChild* x) const {
 	return a && a->filter(filter_lower);
 }
 
-void AppChooser::update_display_priv() {
+void AppChooser::update_display() {
 	AppContent* tmp = nullptr;
 	tmp = apps_pending.exchange(tmp);
 	if(tmp) {
@@ -165,7 +165,7 @@ void AppChooser::update_display_priv() {
 }
 
 bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command) {
-	update_display_priv();
+	update_display();
 	
 	if(!apps && !spinner.get_parent()) {
 		sw->add(spinner); // in this case, nothing has been added to sw yet
@@ -230,10 +230,6 @@ bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& cus
 	return false;
 }
 
-void AppChooser::update_display() {
-	if(!apps) update_display_priv();
-}
-
 AppChooser::~AppChooser() {
 	if(monitor) g_object_unref(monitor);
 	exit_request.store(true);
@@ -244,5 +240,4 @@ AppChooser::~AppChooser() {
 	update_timer.disconnect();
 	if(idle_source) g_source_remove(idle_source);
 }
-
 

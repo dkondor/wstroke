@@ -35,6 +35,7 @@ class AppChooser {
 		Gtk::CheckButton* cb;
 		Gtk::Button *select_ok;
 		Glib::ustring filter_lower;
+		Gtk::Spinner spinner; // used to display a spinner while the apps are loaded
 		
 		GAppInfoMonitor* monitor = nullptr;
 		
@@ -63,6 +64,7 @@ class AppChooser {
 		bool more_work = false;
 		std::atomic<bool> exit_request{false};
 		bool first_run = false;
+		guint idle_source = 0;
 		
 		bool update_pending = false;
 		sigc::connection update_timer;
@@ -70,10 +72,11 @@ class AppChooser {
 		bool update_apps();
 		void thread_func();
 		
-		// friend void on_apps_changed(GAppInfoMonitor*, void* p);
+		friend gboolean idle_results(void* ptr);
 		
 		static int apps_sort(const Gtk::FlowBoxChild* x, const Gtk::FlowBoxChild* y);
 		bool apps_filter(const Gtk::FlowBoxChild* x) const;
+		void update_display(); // update displayed apps
 		
 	public:
 		Glib::RefPtr<Gio::AppInfo> res_app;

@@ -46,6 +46,14 @@ bool AppChooser::update_apps() {
 	return false;
 }
 
+gboolean idle_results(void* ptr) {
+	AppChooser* tmp = (AppChooser*)ptr;
+	if(!tmp->apps) tmp->update_display();
+	std::lock_guard<std::mutex> lock(tmp->mutex);
+	tmp->idle_source = 0;
+	return FALSE; // remove the source
+}
+
 void AppChooser::thread_func() {
 	while(true) {
 		if(exit_request.load()) break;
@@ -69,7 +77,12 @@ void AppChooser::thread_func() {
 		}
 		
 		std::lock_guard<std::mutex> lock(mutex);
-		tmp = apps_pending.exchange(tmp);
+		if(!exit_request.load()) {
+			tmp = apps_pending.exchange(tmp);
+			// signal the main thread that now we have valid apps to display
+			// note: Glib::signal_idle().connect() is not thread-safe?
+			if(!idle_source) idle_source = g_idle_add(idle_results, this);
+		}
 		if(tmp) delete tmp;
 		if(!more_work) {
 			thread_running = false;
@@ -132,14 +145,7 @@ bool AppChooser::apps_filter(const Gtk::FlowBoxChild* x) const {
 	return a && a->filter(filter_lower);
 }
 
-bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command) {
-	if(!apps && !apps_pending)
-	{
-		// in this case, the worker thread should be running -- only exception is if we have not started it yet from startup()
-		if(thread.joinable()) thread.join();
-		else return false;
-	}
-	
+void AppChooser::update_display() {
 	AppContent* tmp = nullptr;
 	tmp = apps_pending.exchange(tmp);
 	if(tmp) {
@@ -154,9 +160,17 @@ bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& cus
 		apps->flowbox->set_sort_func(&apps_sort);
 		apps->flowbox->set_filter_func([this](const Gtk::FlowBoxChild* x) { return apps_filter(x); });
 		sw->add(*apps->flowbox);
+		apps->flowbox->show_all();
 	}
+}
+
+bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& custom_command) {
+	update_display();
 	
-	if(!apps) return false;
+	if(!apps && !spinner.get_parent()) {
+		sw->add(spinner); // in this case, nothing has been added to sw yet
+		spinner.start();
+	}
 	
 	if(custom_command.empty()) {
 		cb->set_active(false);
@@ -171,7 +185,7 @@ bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& cus
 	select_ok->grab_default();
 	Glib::ustring str = Glib::ustring::compose(_("Choose app to run for gesture %1"), gesture_name);
 	header->set_subtitle(str);
-		
+	
 	dialog->show_all();
 	
 	auto x = dialog->run();
@@ -184,7 +198,7 @@ bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& cus
 			res_app.reset();
 			return true;
 		}
-		else {
+		else if (apps) {
 			custom_res = false;
 			auto tmp = apps->flowbox->get_selected_children();
 			if(tmp.size()) {
@@ -216,8 +230,6 @@ bool AppChooser::run(const Glib::ustring& gesture_name, const Glib::ustring& cus
 	return false;
 }
 
-
-
 AppChooser::~AppChooser() {
 	if(monitor) g_object_unref(monitor);
 	exit_request.store(true);
@@ -226,6 +238,6 @@ AppChooser::~AppChooser() {
 	if(tmp) delete tmp;
 	sw->remove();
 	update_timer.disconnect();
+	if(idle_source) g_source_remove(idle_source);
 }
-
 

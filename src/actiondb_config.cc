@@ -167,7 +167,8 @@ void ActionDB::remove_app_r(ActionListDiff<false>* app) {
 	/* 2. Remove from the list of apps */
 	if(app->app) apps.erase(app->name);
 	/* 3. Remove all child apps */
-	for(auto& c : app->children) remove_app(&c);
+	while(!app->children.empty())
+		remove_app(&app->children.front());
 }
 
 ActionListDiff<false>* ActionDB::add_app(ActionListDiff<false>* parent, const std::string& name, bool real_app) {

@@ -1201,7 +1201,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					auto t = wf::get_current_time();
 					own_button = true; // will be reset to false in on_raw_pointer_button ()
 					parent->input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_PRESSED);
-					parent->input.pointer_button(t, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
+					parent->input.pointer_frame();
+					parent->input.pointer_button(t + 1, tmp.get_button(), WL_POINTER_BUTTON_STATE_RELEASED);
+					parent->input.pointer_frame();
 					view_unmapped.disconnect();
 				});
 			}

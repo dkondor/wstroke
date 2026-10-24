@@ -225,6 +225,15 @@ void input_headless::pointer_end_pinch(uint32_t time_msec, bool cancelled) {
 	wl_signal_emit(&(input_pointer->events.pinch_end), &ev);
 }
 
+void input_headless::pointer_frame() {
+	if(!(input_pointer && headless_backend)) {
+		LOGW("No input device created!");
+		return;
+	}
+	LOGD("Emitting pointer frame event");
+	wl_signal_emit_mutable(&(input_pointer->events.frame), input_pointer);
+}
+
 void input_headless::keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state) {
 	if(!(input_keyboard && headless_backend)) {
 		LOGW("No input device created!");

@@ -709,6 +709,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		wf::option_wrapper_t<std::string> resize_edges{"wstroke/resize_edges"};
 		wf::option_wrapper_t<double> touchpad_scroll_sensitivity{"wstroke/touchpad_scroll_sensitivity"};
 		wf::option_wrapper_t<int> touchpad_pinch_sensitivity{"wstroke/touchpad_pinch_sensitivity"};
+		wf::option_wrapper_t<int> sendkey_delay{"wstroke/sendkey_delay"};
 		
 		/** Grab interface to track input while a stroke is being drawn. This means
 		 * that input is not passed to underlying surfaces (they are notified of
@@ -744,7 +745,8 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		};
 		
 		Stroke::PreStroke ps;
-		wf::wl_idle_call idle_generate;
+		wf::wl_idle_call idle_generate; // action immediately executed after end_stroke()
+		wf::wl_timer<false> idle_generate_timer; // action executed as a delay (workaround if the above does not work)
 		wayfire_view target_view;
 		wayfire_view initial_active_view;
 		wayfire_view mouse_view;
@@ -831,6 +833,16 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			uint32_t mod = action->get_mods();
 			uint32_t key = action->get_key();
 			if(key) {
+				/* Having a delay is a workaround for Qt6 apps that may not
+				 * recognize keyboard shortcuts (e.g. Ctrl+O to open a file)
+				 * if sent immediately when refocused after a stroke. The default
+				 * value of 50ms seems to work OK and without causing any issues.
+				 * Note: should not be set to a negative value based on the
+				 * metadata, but better to check here to be safe (we don't want
+				 * to add arbitrarily large delays that could cause actions to
+				 * happen unpredictable at some future time). */
+				int delay = sendkey_delay;
+				delay = std::clamp(delay, 0, 500);
 				set_idle_action([this, mod, key] () {
 					uint32_t t = wf::get_current_time();
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_PRESSED);
@@ -840,7 +852,7 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 					parent->input.keyboard_key(t, key - 8, WL_KEYBOARD_KEY_STATE_RELEASED);
 					keyboard_modifiers(t, mod, WL_KEYBOARD_KEY_STATE_RELEASED);
 					if(mod) parent->input.keyboard_mods(0, 0, 0);
-				});
+				}, false, (uint32_t)delay);
 			}
 		}
 		void visit(const SendText* action) override {
@@ -1018,14 +1030,16 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 		/* set the action taken by the idle callback;
 		 * this automatically handles refocusing if needed */
 		template<class CB>
-		void set_idle_action(CB&& cb, bool refocus_after_action = true) {
+		void set_idle_action(CB&& cb, bool refocus_after_action = true, uint32_t delay_ms = 0) {
 			needs_refocus2 = needs_refocus;
-			idle_generate.run_once([this, cb, refocus_after_action] () {
+			auto cb2 = [this, cb, refocus_after_action] () {
 				if(needs_refocus2 && !refocus_after_action) wf::get_core().seat->focus_view(initial_active_view);
 				cb();
 				if(needs_refocus2 && refocus_after_action) wf::get_core().seat->focus_view(initial_active_view);
 				view_unmapped.disconnect();
-			});
+			};
+			if (delay_ms == 0) idle_generate.run_once(std::move(cb2));
+			else idle_generate_timer.set_timeout(delay_ms, std::move(cb2));
 			needs_refocus = false;
 		}
 		
@@ -1073,6 +1087,9 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 			/* note: end any previously running stroke action */
 			end_touchpad();
 			end_ignore();
+			/* also cancel any delayed action if it has not executed yet:
+			 * it would be too confusing to have it happen while drawing the next stroke */
+			idle_generate_timer.disconnect();
 			
 			initial_active_view = wf::get_core().seat->get_active_view();
 			if(initial_active_view && initial_active_view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)

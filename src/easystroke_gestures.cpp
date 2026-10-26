@@ -1205,13 +1205,13 @@ class wstroke : public wf::per_output_plugin_instance_t, public wf::pointer_inte
 				/* Generate a "fake" mouse click to pass on to the view
 				 * originally under the mouse.
 				 * 
-				 * Note: we cannot directly generate a click since using the
-				 * grab interface "unfocuses" any view under the cursor for
-				 * the purpose of receiving these events. The
-				 * grab_interface->ungrab() call does not instantly reset
-				 * this to avoid propagating this event, but adds the
-				 * necessary "refocus" to the idle loop. With this call,
-				 * we are adding the emulated click to the idle loop as well. */
+				 * Note: originally this was required to run when idle as
+				 * we would still have the grab interface active at this
+				 * point. With the change to listening to raw mouse events,
+				 * this is not the case anymore (if we are here, we have
+				 * not yet grabbed the input), but it is nevertheless
+				 * cleaner not to generate additional clicks from a click
+				 * handler (which this function is typically called from). */
 				idle_generate.run_once([this]() {
 					check_focus_mouse_view();
 					const wf::buttonbinding_t& tmp = initiate;

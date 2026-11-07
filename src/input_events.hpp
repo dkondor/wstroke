@@ -58,6 +58,8 @@ class input_headless {
 		void pointer_start_pinch(uint32_t time_msec, uint32_t fingers);
 		void pointer_update_pinch(uint32_t time_msec, uint32_t fingers, double dx, double dy, double scale, double rotation);
 		void pointer_end_pinch(uint32_t time_msec, bool cancelled);
+		/* emit a frame event for the pointer */
+		void pointer_frame();
 		/* emit a keyboard event */
 		void keyboard_key(uint32_t time_msec, uint32_t key, enum wl_keyboard_key_state state);
 		/* modify the modifier state of the keyboard */

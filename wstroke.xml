@@ -93,13 +93,20 @@
 				<precision>0.05</precision>
 				<min>0.05</min>
 			</option>
-			
 			<option name="touchpad_pinch_sensitivity" type="int">
 				<_short>Touchpad pinch sensitivity</_short>
 				<_long>Specify how sensitive are pinch actions to pointer movements</_long>
 				<default>200</default>
 				<precision>10</precision>
 				<min>10</min>
+			</option>
+			<option name="sendkey_delay" type="int">
+				<_short>Delay before Key actions (in ms)</_short>
+				<_long>Having this is a workaround required for keyboard shortcuts to work in Qt apps. The default setting should work in most cases.</_long>
+				<default>50</default>
+				<precision>10</precision>
+				<min>0</min>
+				<max>500</max>
 			</option>
 		</group>
 	</plugin>
